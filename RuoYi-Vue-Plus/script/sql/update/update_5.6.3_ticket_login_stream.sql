@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS `ticket_login_batch_detail` (
+  `detail_id` bigint(20) NOT NULL COMMENT '登录批次明细主键',
+  `tenant_id` varchar(20) DEFAULT '000000' COMMENT '租户编号',
+  `batch_id` bigint(20) NOT NULL COMMENT '登录批次主键',
+  `account_id` bigint(20) NOT NULL COMMENT '账号主键',
+  `platform_id` bigint(20) NOT NULL COMMENT '平台主键',
+  `execute_status` varchar(32) DEFAULT 'processing' COMMENT '执行状态',
+  `result_message` varchar(500) DEFAULT NULL COMMENT '返回信息',
+  `session_token` varchar(255) DEFAULT NULL COMMENT '会话令牌',
+  `session_expire_time` datetime DEFAULT NULL COMMENT '会话到期时间',
+  `executed_at` datetime DEFAULT NULL COMMENT '执行时间',
+  `create_dept` bigint(20) DEFAULT NULL COMMENT '创建部门',
+  `create_by` bigint(20) DEFAULT NULL COMMENT '创建者',
+  `create_time` datetime DEFAULT NULL COMMENT '创建时间',
+  `update_by` bigint(20) DEFAULT NULL COMMENT '更新者',
+  `update_time` datetime DEFAULT NULL COMMENT '更新时间',
+  `del_flag` bigint(20) DEFAULT 0 COMMENT '删除标志',
+  PRIMARY KEY (`detail_id`),
+  KEY `idx_ticket_login_detail_batch` (`batch_id`),
+  KEY `idx_ticket_login_detail_account` (`account_id`),
+  KEY `idx_ticket_login_detail_status` (`execute_status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='登录批次明细表';

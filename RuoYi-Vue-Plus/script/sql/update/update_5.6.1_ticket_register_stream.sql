@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS `ticket_registration_batch_detail` (
+  `detail_id` bigint(20) NOT NULL COMMENT '明细主键',
+  `tenant_id` varchar(20) DEFAULT '000000' COMMENT '租户编号',
+  `batch_id` bigint(20) NOT NULL COMMENT '注册批次主键',
+  `phone_id` bigint(20) NOT NULL COMMENT '号码主键',
+  `platform_id` bigint(20) NOT NULL COMMENT '平台主键',
+  `execute_status` varchar(32) DEFAULT 'processing' COMMENT '执行状态',
+  `result_message` varchar(500) DEFAULT NULL COMMENT '返回信息',
+  `account_id` bigint(20) DEFAULT NULL COMMENT '账号主键',
+  `account_no` varchar(128) DEFAULT NULL COMMENT '账号编号',
+  `executed_at` datetime DEFAULT NULL COMMENT '执行时间',
+  `create_dept` bigint(20) DEFAULT NULL COMMENT '创建部门',
+  `create_by` bigint(20) DEFAULT NULL COMMENT '创建者',
+  `create_time` datetime DEFAULT NULL COMMENT '创建时间',
+  `update_by` bigint(20) DEFAULT NULL COMMENT '更新者',
+  `update_time` datetime DEFAULT NULL COMMENT '更新时间',
+  `del_flag` bigint(20) DEFAULT 0 COMMENT '删除标志',
+  PRIMARY KEY (`detail_id`),
+  KEY `idx_ticket_reg_detail_batch` (`batch_id`),
+  KEY `idx_ticket_reg_detail_phone` (`phone_id`),
+  KEY `idx_ticket_reg_detail_status` (`execute_status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='注册批次明细表';
