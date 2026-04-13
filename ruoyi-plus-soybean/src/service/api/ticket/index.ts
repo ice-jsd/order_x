@@ -2,8 +2,6 @@ export * from './platform';
 export * from './phone';
 export * from './relation';
 export * from './account';
-export * from './registration-batch';
-export * from './login-batch';
 export * from './event';
 export * from './sale-task';
 export * from './order-execution';

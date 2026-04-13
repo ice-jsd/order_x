@@ -24,9 +24,24 @@ public class TicketOrderExecution extends TenantEntity {
     private Long taskId;
     private Long platformId;
     private Long accountId;
+    private String productId;
+    private Integer purchaseQuantity;
+    private String flowType;
+    private String fulfillmentType;
+    private String paymentMode;
+    private Long scheduleVersion;
+    private String currentStep;
+    private String stepStatus;
+    private String stepTrace;
+    private String paymentStatus;
     private String orderNo;
     private String executionStatus;
     private String resultMessage;
+    private String rawResult;
+    private String workerId;
+    private Integer attemptCount;
+    private Date heartbeatAt;
+    private Date startedAt;
     private Date executedAt;
 
     @TableLogic

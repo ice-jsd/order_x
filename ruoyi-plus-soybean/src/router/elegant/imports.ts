@@ -46,11 +46,9 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   ticket_account: () => import("@/views/ticket/account/index.vue"),
   "ticket_audit-log": () => import("@/views/ticket/audit-log/index.vue"),
   ticket_event: () => import("@/views/ticket/event/index.vue"),
-  "ticket_login-batch": () => import("@/views/ticket/login-batch/index.vue"),
   "ticket_order-execution": () => import("@/views/ticket/order-execution/index.vue"),
   ticket_phone: () => import("@/views/ticket/phone/index.vue"),
   ticket_platform: () => import("@/views/ticket/platform/index.vue"),
-  "ticket_registration-batch": () => import("@/views/ticket/registration-batch/index.vue"),
   "ticket_sale-task": () => import("@/views/ticket/sale-task/index.vue"),
   tool_gen: () => import("@/views/tool/gen/index.vue"),
 };

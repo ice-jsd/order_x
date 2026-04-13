@@ -31,6 +31,7 @@ public class TicketPlatformConfig extends TenantEntity {
     private Boolean supportsEmail;
     private Boolean supportsPhoneIdentity;
     private String callbackUrl;
+    private String orderSubmitUrl;
     private String callbackSecretMask;
     private String registrationTemplate;
     private String loginStrategy;

@@ -1,0 +1,21 @@
+{
+  "port": "8099",
+  "dsn": "root:123456@tcp(127.0.0.1:3306)/order_x?charset=utf8mb4&parseTime=true&loc=Local",
+  "workers": 32,
+  "requestTimeoutSeconds": 30,
+  "redisAddr": "127.0.0.1:6379",
+  "redisPassword": "",
+  "redisDb": 0,
+  "streamKey": "ticket:purchase:stream:ready",
+  "delayedZsetKey": "ticket:purchase:zset:delayed",
+  "jobKeyPrefix": "ticket:purchase:job:",
+  "heartbeatKeyPrefix": "ticket:purchase:heartbeat:",
+  "accountLockKeyPrefix": "ticket:purchase:lock:account:",
+  "consumerGroup": "ticket-order-executor",
+  "consumerNamePrefix": "ticket-order-executor",
+  "accountLockTtlSeconds": 60,
+  "heartbeatIntervalSeconds": 5,
+  "pendingReclaimIdleSeconds": 60,
+  "delayedPollIntervalMs": 200,
+  "retryDelaySeconds": 3
+}

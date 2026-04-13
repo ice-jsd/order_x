@@ -1,0 +1,4 @@
+2026/04/13 14:16:14 loaded config from config.local.json
+2026/04/13 14:16:14 ticket order executor listening on :8099 with 32 workers, redis=127.0.0.1:6379, stream=ticket:purchase:stream:ready, consumer=ticket-order-executor-hanhanguoshi-59960
+2026/04/13 14:17:55 skip stale execution 2043409764667449345 because queued plan is no longer current
+2026/04/13 14:17:55 skip stale execution 2043417668699115522 because queued plan is no longer current

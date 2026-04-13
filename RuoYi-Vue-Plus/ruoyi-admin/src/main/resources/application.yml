@@ -249,6 +249,21 @@ websocket:
   # 设置访问源地址
   allowedOrigins: '*'
 
+--- # ticket 商品抢购执行器
+ticket:
+  order-executor:
+    mode: "redis"
+    base-url: "http://127.0.0.1:8099"
+    dispatch-path: "/internal/purchase-task/dispatch"
+    timeout-ms: 5000
+    stream-key: "ticket:purchase:stream:ready"
+    delayed-zset-key: "ticket:purchase:zset:delayed"
+    job-key-prefix: "ticket:purchase:job:"
+    heartbeat-key-prefix: "ticket:purchase:heartbeat:"
+    account-lock-key-prefix: "ticket:purchase:lock:account:"
+    job-ttl-seconds: 86400
+    heartbeat-timeout-seconds: 30
+
 --- # warm-flow工作流配置
 warm-flow:
   # 是否开启工作流，默认true

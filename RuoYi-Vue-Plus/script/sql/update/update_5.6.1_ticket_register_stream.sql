@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS `ticket_registration_batch_detail` (
   `execute_status` varchar(32) DEFAULT 'processing' COMMENT '执行状态',
   `result_message` varchar(500) DEFAULT NULL COMMENT '返回信息',
   `account_id` bigint(20) DEFAULT NULL COMMENT '账号主键',
-  `account_no` varchar(128) DEFAULT NULL COMMENT '账号编号',
+  `email` varchar(255) DEFAULT NULL COMMENT '账号邮箱',
   `executed_at` datetime DEFAULT NULL COMMENT '执行时间',
   `create_dept` bigint(20) DEFAULT NULL COMMENT '创建部门',
   `create_by` bigint(20) DEFAULT NULL COMMENT '创建者',

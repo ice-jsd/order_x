@@ -1,0 +1,630 @@
+ Consume Time：4 ms 2026-04-13 02:57:50
+ Execute SQL：SELECT oss_config_id, config_key, access_key, secret_key, bucket_name, prefix, endpoint, domain, is_https, region, status, ext1, remark, access_policy, create_dept, create_by, create_time, update_by, update_time FROM sys_oss_config
+
+ Consume Time：5 ms 2026-04-13 02:58:13
+ Execute SQL：INSERT INTO ticket_mock_platform_order (mock_order_id, platform_code, execution_id, task_id, account_id, flow_type, fulfillment_type, payment_mode, step_type, product_id, purchase_quantity, delivery_option, request_payload, response_payload, mock_status, mock_order_no, payment_status, created_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time) VALUES (2043403330588336130, 'mock-direct-online', 999001, 9500011, 9300011, 'direct_order', 'shipping', 'online', 'SUBMIT_ORDER', 'mock-sku-direct-online-001', 2, 'express', '{"executionId":999001,"taskId":9500011,"accountId":9300011,"productId":"mock-sku-direct-online-001","purchaseQuantity":2,"orderFlowType":"direct_order","fulfillmentType":"shipping","paymentMode":"online","taskOptions":{"deliveryOption":"express"},"step":{"stepType":"SUBMIT_ORDER","currentStep":"creating_order","options":{}}}', '{"success":true,"status":"submitted","message":"mock order submitted","orderNo":"mock-direct-online-mock-2043403330588336129","paymentStatus":"pending_online","mockData":{"platformCode":"mock-direct-online","stepType":"SUBMIT_ORDER","flowType":"direct_order","fulfillmentType":"shipping","paymentMode":"online","deliveryOption":"express"}}', 'submitted', 'mock-direct-online-mock-2043403330588336129', 'pending_online', '2026-04-13 02:58:13', 0, '000000', -1, -1, '2026-04-13 02:58:13', -1, '2026-04-13 02:58:13')
+
+ Consume Time：2 ms 2026-04-13 02:59:44
+ Execute SQL：INSERT INTO ticket_mock_platform_order (mock_order_id, platform_code, execution_id, task_id, account_id, flow_type, fulfillment_type, payment_mode, step_type, product_id, purchase_quantity, delivery_option, request_payload, response_payload, mock_status, created_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time) VALUES (2043403713301798914, 'mock-direct-online', 9700011, 9500011, 9300011, 'direct_order', 'shipping', 'online', 'SELECT_DELIVERY', 'mock-sku-direct-online-001', 2, 'express', '{"accountId":9300011,"accountInfo":{"channel":"email","nickname":"mock-direct-online","region":"JP"},"adapterType":"mock","currentStep":"selecting_fulfillment","email":"mock-direct-online-001@test.local","executionId":9700011,"fulfillmentType":"shipping","orderFlowType":"direct_order","orderNo":"","paymentMode":"online","paymentStatus":"pending_online","platformCode":"mock-direct-online","platformId":9100011,"platformName":"Mock 直下配送线上支付","productId":"mock-sku-direct-online-001","purchaseQuantity":2,"reqData":{"browser":"mock","channel":"email","sessionToken":"mock-session-001"},"step":{"currentStep":"selecting_fulfillment","options":null,"stepType":"SELECT_DELIVERY"},"stepStatus":"running","taskId":9500011,"taskOptions":{"deliveryOption":"express","mockBehavior":""}}', '{"success":true,"status":"fulfillment_selected","message":"已选择配送方式","mockData":{"platformCode":"mock-direct-online","stepType":"SELECT_DELIVERY","flowType":"direct_order","fulfillmentType":"shipping","paymentMode":"online","deliveryOption":"express"}}', 'fulfillment_selected', '2026-04-13 02:59:44', 0, '000000', -1, -1, '2026-04-13 02:59:44', -1, '2026-04-13 02:59:44')
+
+ Consume Time：3 ms 2026-04-13 02:59:44
+ Execute SQL：INSERT INTO ticket_mock_platform_order (mock_order_id, platform_code, execution_id, task_id, account_id, flow_type, fulfillment_type, payment_mode, step_type, product_id, purchase_quantity, delivery_option, request_payload, response_payload, mock_status, payment_status, created_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time) VALUES (2043403713364713474, 'mock-direct-online', 9700011, 9500011, 9300011, 'direct_order', 'shipping', 'online', 'SELECT_PAYMENT_MODE', 'mock-sku-direct-online-001', 2, 'express', '{"accountId":9300011,"accountInfo":{"channel":"email","nickname":"mock-direct-online","region":"JP"},"adapterType":"mock","currentStep":"selecting_payment","email":"mock-direct-online-001@test.local","executionId":9700011,"fulfillmentType":"shipping","orderFlowType":"direct_order","orderNo":"","paymentMode":"online","paymentStatus":"pending_online","platformCode":"mock-direct-online","platformId":9100011,"platformName":"Mock 直下配送线上支付","productId":"mock-sku-direct-online-001","purchaseQuantity":2,"reqData":{"browser":"mock","channel":"email","sessionToken":"mock-session-001"},"step":{"currentStep":"selecting_payment","options":null,"stepType":"SELECT_PAYMENT_MODE"},"stepStatus":"running","taskId":9500011,"taskOptions":{"deliveryOption":"express","mockBehavior":""}}', '{"success":true,"status":"payment_mode_selected","message":"已选择支付方式","paymentStatus":"pending_online","mockData":{"platformCode":"mock-direct-online","stepType":"SELECT_PAYMENT_MODE","flowType":"direct_order","fulfillmentType":"shipping","paymentMode":"online","deliveryOption":"express"}}', 'payment_mode_selected', 'pending_online', '2026-04-13 02:59:44', 0, '000000', -1, -1, '2026-04-13 02:59:44', -1, '2026-04-13 02:59:44')
+
+ Consume Time：1 ms 2026-04-13 02:59:44
+ Execute SQL：INSERT INTO ticket_mock_platform_order (mock_order_id, platform_code, execution_id, task_id, account_id, flow_type, fulfillment_type, payment_mode, step_type, product_id, purchase_quantity, delivery_option, request_payload, response_payload, mock_status, created_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time) VALUES (2043403713440210946, 'mock-cart-online', 9700013, 9500013, 9300013, 'cart_checkout', 'shipping', 'online', 'ADD_TO_CART', 'mock-sku-cart-online-003', 3, 'priority', '{"accountId":9300013,"accountInfo":{"channel":"email","nickname":"mock-cart-online","region":"JP"},"adapterType":"mock","currentStep":"carting","email":"mock-cart-online-003@test.local","executionId":9700013,"fulfillmentType":"shipping","orderFlowType":"cart_checkout","orderNo":"","paymentMode":"online","paymentStatus":"pending_online","platformCode":"mock-cart-online","platformId":9100013,"platformName":"Mock 加购配送线上支付","productId":"mock-sku-cart-online-003","purchaseQuantity":3,"reqData":{"browser":"mock","channel":"email","sessionToken":"mock-session-003"},"step":{"currentStep":"carting","options":null,"stepType":"ADD_TO_CART"},"stepStatus":"running","taskId":9500013,"taskOptions":{"deliveryOption":"priority","mockBehavior":""}}', '{"success":true,"status":"carted","message":"已加入购物车","mockData":{"platformCode":"mock-cart-online","stepType":"ADD_TO_CART","flowType":"cart_checkout","fulfillmentType":"shipping","paymentMode":"online","deliveryOption":"priority"}}', 'carted', '2026-04-13 02:59:44', 0, '000000', -1, -1, '2026-04-13 02:59:44', -1, '2026-04-13 02:59:44')
+
+ Consume Time：1 ms 2026-04-13 02:59:44
+ Execute SQL：INSERT INTO ticket_mock_platform_order (mock_order_id, platform_code, execution_id, task_id, account_id, flow_type, fulfillment_type, payment_mode, step_type, product_id, purchase_quantity, delivery_option, request_payload, response_payload, mock_status, mock_order_no, payment_status, created_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time) VALUES (2043403713503125506, 'mock-direct-online', 9700011, 9500011, 9300011, 'direct_order', 'shipping', 'online', 'SUBMIT_ORDER', 'mock-sku-direct-online-001', 2, 'express', '{"accountId":9300011,"accountInfo":{"channel":"email","nickname":"mock-direct-online","region":"JP"},"adapterType":"mock","currentStep":"creating_order","email":"mock-direct-online-001@test.local","executionId":9700011,"fulfillmentType":"shipping","orderFlowType":"direct_order","orderNo":"","paymentMode":"online","paymentStatus":"pending_online","platformCode":"mock-direct-online","platformId":9100011,"platformName":"Mock 直下配送线上支付","productId":"mock-sku-direct-online-001","purchaseQuantity":2,"reqData":{"browser":"mock","channel":"email","sessionToken":"mock-session-001"},"step":{"currentStep":"creating_order","options":null,"stepType":"SUBMIT_ORDER"},"stepStatus":"running","taskId":9500011,"taskOptions":{"deliveryOption":"express","mockBehavior":""}}', '{"success":true,"status":"submitted","message":"mock order submitted","orderNo":"mock-direct-online-mock-2043403713503125505","paymentStatus":"pending_online","mockData":{"platformCode":"mock-direct-online","stepType":"SUBMIT_ORDER","flowType":"direct_order","fulfillmentType":"shipping","paymentMode":"online","deliveryOption":"express"}}', 'submitted', 'mock-direct-online-mock-2043403713503125505', 'pending_online', '2026-04-13 02:59:44', 0, '000000', -1, -1, '2026-04-13 02:59:44', -1, '2026-04-13 02:59:44')
+
+ Consume Time：5 ms 2026-04-13 02:59:44
+ Execute SQL：INSERT INTO ticket_mock_platform_order (mock_order_id, platform_code, execution_id, task_id, account_id, flow_type, fulfillment_type, payment_mode, step_type, product_id, purchase_quantity, delivery_option, request_payload, response_payload, mock_status, created_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time) VALUES (2043403713503125507, 'mock-cart-online', 9700013, 9500013, 9300013, 'cart_checkout', 'shipping', 'online', 'SELECT_DELIVERY', 'mock-sku-cart-online-003', 3, 'priority', '{"accountId":9300013,"accountInfo":{"channel":"email","nickname":"mock-cart-online","region":"JP"},"adapterType":"mock","currentStep":"selecting_fulfillment","email":"mock-cart-online-003@test.local","executionId":9700013,"fulfillmentType":"shipping","orderFlowType":"cart_checkout","orderNo":"","paymentMode":"online","paymentStatus":"pending_online","platformCode":"mock-cart-online","platformId":9100013,"platformName":"Mock 加购配送线上支付","productId":"mock-sku-cart-online-003","purchaseQuantity":3,"reqData":{"browser":"mock","channel":"email","sessionToken":"mock-session-003"},"step":{"currentStep":"selecting_fulfillment","options":null,"stepType":"SELECT_DELIVERY"},"stepStatus":"running","taskId":9500013,"taskOptions":{"deliveryOption":"priority","mockBehavior":""}}', '{"success":true,"status":"fulfillment_selected","message":"已选择配送方式","mockData":{"platformCode":"mock-cart-online","stepType":"SELECT_DELIVERY","flowType":"cart_checkout","fulfillmentType":"shipping","paymentMode":"online","deliveryOption":"priority"}}', 'fulfillment_selected', '2026-04-13 02:59:44', 0, '000000', -1, -1, '2026-04-13 02:59:44', -1, '2026-04-13 02:59:44')
+
+ Consume Time：5 ms 2026-04-13 02:59:44
+ Execute SQL：INSERT INTO ticket_mock_platform_order (mock_order_id, platform_code, execution_id, task_id, account_id, flow_type, fulfillment_type, payment_mode, step_type, product_id, purchase_quantity, delivery_option, request_payload, response_payload, mock_status, mock_order_no, payment_status, created_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time) VALUES (2043403713557651457, 'mock-direct-online', 9700011, 9500011, 9300011, 'direct_order', 'shipping', 'online', 'CREATE_ONLINE_PAYMENT', 'mock-sku-direct-online-001', 2, 'express', '{"accountId":9300011,"accountInfo":{"channel":"email","nickname":"mock-direct-online","region":"JP"},"adapterType":"mock","currentStep":"awaiting_payment","email":"mock-direct-online-001@test.local","executionId":9700011,"fulfillmentType":"shipping","orderFlowType":"direct_order","orderNo":"mock-direct-online-mock-2043403713503125505","paymentMode":"online","paymentStatus":"pending_online","platformCode":"mock-direct-online","platformId":9100011,"platformName":"Mock 直下配送线上支付","productId":"mock-sku-direct-online-001","purchaseQuantity":2,"reqData":{"browser":"mock","channel":"email","sessionToken":"mock-session-001"},"step":{"currentStep":"awaiting_payment","options":null,"stepType":"CREATE_ONLINE_PAYMENT"},"stepStatus":"running","taskId":9500011,"taskOptions":{"deliveryOption":"express","mockBehavior":""}}', '{"success":true,"status":"pending_payment","message":"mock online payment created","orderNo":"mock-direct-online-mock-2043403713503125505","paymentStatus":"pending_online","mockData":{"platformCode":"mock-direct-online","stepType":"CREATE_ONLINE_PAYMENT","flowType":"direct_order","fulfillmentType":"shipping","paymentMode":"online","deliveryOption":"express"}}', 'pending_payment', 'mock-direct-online-mock-2043403713503125505', 'pending_online', '2026-04-13 02:59:44', 0, '000000', -1, -1, '2026-04-13 02:59:44', -1, '2026-04-13 02:59:44')
+
+ Consume Time：3 ms 2026-04-13 02:59:44
+ Execute SQL：INSERT INTO ticket_mock_platform_order (mock_order_id, platform_code, execution_id, task_id, account_id, flow_type, fulfillment_type, payment_mode, step_type, product_id, purchase_quantity, delivery_option, request_payload, response_payload, mock_status, payment_status, created_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time) VALUES (2043403713624760321, 'mock-cart-online', 9700013, 9500013, 9300013, 'cart_checkout', 'shipping', 'online', 'SELECT_PAYMENT_MODE', 'mock-sku-cart-online-003', 3, 'priority', '{"accountId":9300013,"accountInfo":{"channel":"email","nickname":"mock-cart-online","region":"JP"},"adapterType":"mock","currentStep":"selecting_payment","email":"mock-cart-online-003@test.local","executionId":9700013,"fulfillmentType":"shipping","orderFlowType":"cart_checkout","orderNo":"","paymentMode":"online","paymentStatus":"pending_online","platformCode":"mock-cart-online","platformId":9100013,"platformName":"Mock 加购配送线上支付","productId":"mock-sku-cart-online-003","purchaseQuantity":3,"reqData":{"browser":"mock","channel":"email","sessionToken":"mock-session-003"},"step":{"currentStep":"selecting_payment","options":null,"stepType":"SELECT_PAYMENT_MODE"},"stepStatus":"running","taskId":9500013,"taskOptions":{"deliveryOption":"priority","mockBehavior":""}}', '{"success":true,"status":"payment_mode_selected","message":"已选择支付方式","paymentStatus":"pending_online","mockData":{"platformCode":"mock-cart-online","stepType":"SELECT_PAYMENT_MODE","flowType":"cart_checkout","fulfillmentType":"shipping","paymentMode":"online","deliveryOption":"priority"}}', 'payment_mode_selected', 'pending_online', '2026-04-13 02:59:44', 0, '000000', -1, -1, '2026-04-13 02:59:44', -1, '2026-04-13 02:59:44')
+
+ Consume Time：3 ms 2026-04-13 02:59:44
+ Execute SQL：INSERT INTO ticket_mock_platform_order (mock_order_id, platform_code, execution_id, task_id, account_id, flow_type, fulfillment_type, payment_mode, step_type, product_id, purchase_quantity, delivery_option, request_payload, response_payload, mock_status, mock_order_no, payment_status, created_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time) VALUES (2043403713687674882, 'mock-cart-online', 9700013, 9500013, 9300013, 'cart_checkout', 'shipping', 'online', 'SUBMIT_ORDER', 'mock-sku-cart-online-003', 3, 'priority', '{"accountId":9300013,"accountInfo":{"channel":"email","nickname":"mock-cart-online","region":"JP"},"adapterType":"mock","currentStep":"creating_order","email":"mock-cart-online-003@test.local","executionId":9700013,"fulfillmentType":"shipping","orderFlowType":"cart_checkout","orderNo":"","paymentMode":"online","paymentStatus":"pending_online","platformCode":"mock-cart-online","platformId":9100013,"platformName":"Mock 加购配送线上支付","productId":"mock-sku-cart-online-003","purchaseQuantity":3,"reqData":{"browser":"mock","channel":"email","sessionToken":"mock-session-003"},"step":{"currentStep":"creating_order","options":null,"stepType":"SUBMIT_ORDER"},"stepStatus":"running","taskId":9500013,"taskOptions":{"deliveryOption":"priority","mockBehavior":""}}', '{"success":true,"status":"submitted","message":"mock order submitted","orderNo":"mock-cart-online-mock-2043403713687674881","paymentStatus":"pending_online","mockData":{"platformCode":"mock-cart-online","stepType":"SUBMIT_ORDER","flowType":"cart_checkout","fulfillmentType":"shipping","paymentMode":"online","deliveryOption":"priority"}}', 'submitted', 'mock-cart-online-mock-2043403713687674881', 'pending_online', '2026-04-13 02:59:44', 0, '000000', -1, -1, '2026-04-13 02:59:44', -1, '2026-04-13 02:59:44')
+
+ Consume Time：3 ms 2026-04-13 02:59:44
+ Execute SQL：INSERT INTO ticket_mock_platform_order (mock_order_id, platform_code, execution_id, task_id, account_id, flow_type, fulfillment_type, payment_mode, step_type, product_id, purchase_quantity, delivery_option, request_payload, response_payload, mock_status, mock_order_no, payment_status, created_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time) VALUES (2043403713754783746, 'mock-cart-online', 9700013, 9500013, 9300013, 'cart_checkout', 'shipping', 'online', 'CREATE_ONLINE_PAYMENT', 'mock-sku-cart-online-003', 3, 'priority', '{"accountId":9300013,"accountInfo":{"channel":"email","nickname":"mock-cart-online","region":"JP"},"adapterType":"mock","currentStep":"awaiting_payment","email":"mock-cart-online-003@test.local","executionId":9700013,"fulfillmentType":"shipping","orderFlowType":"cart_checkout","orderNo":"mock-cart-online-mock-2043403713687674881","paymentMode":"online","paymentStatus":"pending_online","platformCode":"mock-cart-online","platformId":9100013,"platformName":"Mock 加购配送线上支付","productId":"mock-sku-cart-online-003","purchaseQuantity":3,"reqData":{"browser":"mock","channel":"email","sessionToken":"mock-session-003"},"step":{"currentStep":"awaiting_payment","options":null,"stepType":"CREATE_ONLINE_PAYMENT"},"stepStatus":"running","taskId":9500013,"taskOptions":{"deliveryOption":"priority","mockBehavior":""}}', '{"success":true,"status":"pending_payment","message":"mock online payment created","orderNo":"mock-cart-online-mock-2043403713687674881","paymentStatus":"pending_online","mockData":{"platformCode":"mock-cart-online","stepType":"CREATE_ONLINE_PAYMENT","flowType":"cart_checkout","fulfillmentType":"shipping","paymentMode":"online","deliveryOption":"priority"}}', 'pending_payment', 'mock-cart-online-mock-2043403713687674881', 'pending_online', '2026-04-13 02:59:44', 0, '000000', -1, -1, '2026-04-13 02:59:44', -1, '2026-04-13 02:59:44')
+
+ Consume Time：2 ms 2026-04-13 03:00:15
+ Execute SQL：INSERT INTO ticket_mock_platform_order (mock_order_id, platform_code, execution_id, task_id, account_id, flow_type, fulfillment_type, payment_mode, step_type, product_id, purchase_quantity, pickup_store_code, request_payload, response_payload, mock_status, created_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time) VALUES (2043403845166522369, 'mock-cart-pickup-cod', 9700014, 9500014, 9300014, 'cart_checkout', 'pickup_store', 'cod_store', 'ADD_TO_CART', 'mock-sku-cart-pickup-cod-004', 1, 'store-shinjuku', '{"accountId":9300014,"accountInfo":{"channel":"email","nickname":"mock-cart-pickup-cod","region":"JP"},"adapterType":"mock","currentStep":"carting","email":"mock-cart-pickup-cod-004@test.local","executionId":9700014,"fulfillmentType":"pickup_store","orderFlowType":"cart_checkout","orderNo":"","paymentMode":"cod_store","paymentStatus":"offline_pending","platformCode":"mock-cart-pickup-cod","platformId":9100014,"platformName":"Mock 加购门店付款","productId":"mock-sku-cart-pickup-cod-004","purchaseQuantity":1,"reqData":{"browser":"mock","channel":"email","sessionToken":"mock-session-004"},"step":{"currentStep":"carting","options":null,"stepType":"ADD_TO_CART"},"stepStatus":"running","taskId":9500014,"taskOptions":{"mockBehavior":"","pickupStoreCode":"store-shinjuku"}}', '{"success":true,"status":"carted","message":"已加入购物车","mockData":{"platformCode":"mock-cart-pickup-cod","stepType":"ADD_TO_CART","flowType":"cart_checkout","fulfillmentType":"pickup_store","paymentMode":"cod_store","pickupStoreCode":"store-shinjuku"}}', 'carted', '2026-04-13 03:00:15', 0, '000000', -1, -1, '2026-04-13 03:00:15', -1, '2026-04-13 03:00:15')
+
+ Consume Time：6 ms 2026-04-13 03:00:15
+ Execute SQL：INSERT INTO ticket_mock_platform_order (mock_order_id, platform_code, execution_id, task_id, account_id, flow_type, fulfillment_type, payment_mode, step_type, product_id, purchase_quantity, pickup_store_code, request_payload, response_payload, mock_status, created_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time) VALUES (2043403845233631234, 'mock-cart-pickup-cod', 9700014, 9500014, 9300014, 'cart_checkout', 'pickup_store', 'cod_store', 'SELECT_PICKUP_STORE', 'mock-sku-cart-pickup-cod-004', 1, 'store-shinjuku', '{"accountId":9300014,"accountInfo":{"channel":"email","nickname":"mock-cart-pickup-cod","region":"JP"},"adapterType":"mock","currentStep":"selecting_fulfillment","email":"mock-cart-pickup-cod-004@test.local","executionId":9700014,"fulfillmentType":"pickup_store","orderFlowType":"cart_checkout","orderNo":"","paymentMode":"cod_store","paymentStatus":"offline_pending","platformCode":"mock-cart-pickup-cod","platformId":9100014,"platformName":"Mock 加购门店付款","productId":"mock-sku-cart-pickup-cod-004","purchaseQuantity":1,"reqData":{"browser":"mock","channel":"email","sessionToken":"mock-session-004"},"step":{"currentStep":"selecting_fulfillment","options":null,"stepType":"SELECT_PICKUP_STORE"},"stepStatus":"running","taskId":9500014,"taskOptions":{"mockBehavior":"","pickupStoreCode":"store-shinjuku"}}', '{"success":true,"status":"fulfillment_selected","message":"已选择自提门店","mockData":{"platformCode":"mock-cart-pickup-cod","stepType":"SELECT_PICKUP_STORE","flowType":"cart_checkout","fulfillmentType":"pickup_store","paymentMode":"cod_store","pickupStoreCode":"store-shinjuku"}}', 'fulfillment_selected', '2026-04-13 03:00:15', 0, '000000', -1, -1, '2026-04-13 03:00:15', -1, '2026-04-13 03:00:15')
+
+ Consume Time：3 ms 2026-04-13 03:00:16
+ Execute SQL：INSERT INTO ticket_mock_platform_order (mock_order_id, platform_code, execution_id, task_id, account_id, flow_type, fulfillment_type, payment_mode, step_type, product_id, purchase_quantity, pickup_store_code, request_payload, response_payload, mock_status, payment_status, created_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time) VALUES (2043403845363654657, 'mock-cart-pickup-cod', 9700014, 9500014, 9300014, 'cart_checkout', 'pickup_store', 'cod_store', 'SELECT_PAYMENT_MODE', 'mock-sku-cart-pickup-cod-004', 1, 'store-shinjuku', '{"accountId":9300014,"accountInfo":{"channel":"email","nickname":"mock-cart-pickup-cod","region":"JP"},"adapterType":"mock","currentStep":"selecting_payment","email":"mock-cart-pickup-cod-004@test.local","executionId":9700014,"fulfillmentType":"pickup_store","orderFlowType":"cart_checkout","orderNo":"","paymentMode":"cod_store","paymentStatus":"offline_pending","platformCode":"mock-cart-pickup-cod","platformId":9100014,"platformName":"Mock 加购门店付款","productId":"mock-sku-cart-pickup-cod-004","purchaseQuantity":1,"reqData":{"browser":"mock","channel":"email","sessionToken":"mock-session-004"},"step":{"currentStep":"selecting_payment","options":null,"stepType":"SELECT_PAYMENT_MODE"},"stepStatus":"running","taskId":9500014,"taskOptions":{"mockBehavior":"","pickupStoreCode":"store-shinjuku"}}', '{"success":true,"status":"payment_mode_selected","message":"已选择支付方式","paymentStatus":"offline_pending","mockData":{"platformCode":"mock-cart-pickup-cod","stepType":"SELECT_PAYMENT_MODE","flowType":"cart_checkout","fulfillmentType":"pickup_store","paymentMode":"cod_store","pickupStoreCode":"store-shinjuku"}}', 'payment_mode_selected', 'offline_pending', '2026-04-13 03:00:16', 0, '000000', -1, -1, '2026-04-13 03:00:16', -1, '2026-04-13 03:00:16')
+
+ Consume Time：3 ms 2026-04-13 03:00:16
+ Execute SQL：INSERT INTO ticket_mock_platform_order (mock_order_id, platform_code, execution_id, task_id, account_id, flow_type, fulfillment_type, payment_mode, step_type, product_id, purchase_quantity, pickup_store_code, request_payload, response_payload, mock_status, mock_order_no, payment_status, created_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time) VALUES (2043403845426569218, 'mock-cart-pickup-cod', 9700014, 9500014, 9300014, 'cart_checkout', 'pickup_store', 'cod_store', 'SUBMIT_ORDER', 'mock-sku-cart-pickup-cod-004', 1, 'store-shinjuku', '{"accountId":9300014,"accountInfo":{"channel":"email","nickname":"mock-cart-pickup-cod","region":"JP"},"adapterType":"mock","currentStep":"creating_order","email":"mock-cart-pickup-cod-004@test.local","executionId":9700014,"fulfillmentType":"pickup_store","orderFlowType":"cart_checkout","orderNo":"","paymentMode":"cod_store","paymentStatus":"offline_pending","platformCode":"mock-cart-pickup-cod","platformId":9100014,"platformName":"Mock 加购门店付款","productId":"mock-sku-cart-pickup-cod-004","purchaseQuantity":1,"reqData":{"browser":"mock","channel":"email","sessionToken":"mock-session-004"},"step":{"currentStep":"creating_order","options":null,"stepType":"SUBMIT_ORDER"},"stepStatus":"running","taskId":9500014,"taskOptions":{"mockBehavior":"","pickupStoreCode":"store-shinjuku"}}', '{"success":true,"status":"submitted","message":"mock order submitted","orderNo":"mock-cart-pickup-cod-mock-2043403845426569217","paymentStatus":"offline_pending","mockData":{"platformCode":"mock-cart-pickup-cod","stepType":"SUBMIT_ORDER","flowType":"cart_checkout","fulfillmentType":"pickup_store","paymentMode":"cod_store","pickupStoreCode":"store-shinjuku"}}', 'submitted', 'mock-cart-pickup-cod-mock-2043403845426569217', 'offline_pending', '2026-04-13 03:00:16', 0, '000000', -1, -1, '2026-04-13 03:00:16', -1, '2026-04-13 03:00:16')
+
+ Consume Time：1 ms 2026-04-13 03:18:09
+ Execute SQL：SELECT user_id, dept_id, user_name, nick_name, user_type, email, phonenumber, sex, avatar, password, status, del_flag, login_ip, login_date, remark, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM sys_user WHERE user_id = 1 AND del_flag = '0' AND tenant_id = '000000'
+
+ Consume Time：1 ms 2026-04-13 03:18:09
+ Execute SQL：SELECT role_id, role_name, role_key, role_sort, data_scope, status FROM sys_role WHERE del_flag = '0' AND (role_id IN (SELECT role_id FROM sys_user_role WHERE user_id = 1)) AND tenant_id = '000000'
+
+ Consume Time：1 ms 2026-04-13 03:18:10
+ Execute SQL：SELECT menu_id, parent_id, menu_name, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, remark, create_dept, create_by, create_time, update_by, update_time FROM sys_menu WHERE (menu_type IN ('M', 'C') AND status = '0') ORDER BY parent_id ASC, order_num ASC
+
+ Consume Time：0 ms 2026-04-13 03:18:10
+ Execute SQL：SELECT id, tenant_id, contact_user_name, contact_phone, company_name, license_number, address, domain, intro, remark, package_id, expire_time, account_count, status, del_flag, create_dept, create_by, create_time, update_by, update_time FROM sys_tenant WHERE del_flag = '0' ORDER BY id ASC
+
+ Consume Time：0 ms 2026-04-13 03:18:23
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：2 ms 2026-04-13 03:18:23
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY platform_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:18:23
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:23
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY platform_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:18:28
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_phone_number WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:28
+ Execute SQL：SELECT phone_id, phone_number, country_code, supplier, status, note, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_phone_number WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY phone_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:18:28
+ Execute SQL：SELECT relation_id, phone_id, platform_id, account_id, status, last_error, last_operate_time, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_phone_platform_relation WHERE del_flag = 0 AND (phone_id IN (2039717553207566337, 2039716388365475841, 2039668206910681089, 2039666393805336577, 9200014, 9200013, 9200012, 9200011, 9200008, 9200007)) AND tenant_id = '000000'
+
+ Consume Time：1 ms 2026-04-13 03:18:28
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_phone_number WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:28
+ Execute SQL：SELECT phone_id, phone_number, country_code, supplier, status, note, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_phone_number WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY phone_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:18:28
+ Execute SQL：SELECT relation_id, phone_id, platform_id, account_id, status, last_error, last_operate_time, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_phone_platform_relation WHERE del_flag = 0 AND (phone_id IN (2039717553207566337, 2039716388365475841, 2039668206910681089, 2039666393805336577, 9200014, 9200013, 9200012, 9200011, 9200008, 9200007)) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:33
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:33
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY platform_id DESC LIMIT 200
+
+ Consume Time：4 ms 2026-04-13 03:18:33
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_managed_account WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:33
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY account_id DESC LIMIT 10
+
+ Consume Time：1 ms 2026-04-13 03:18:33
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (2042187493571399682, 2042187493571399682, 2042187493571399682, 2042187493571399682, 2042187493571399682, 9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:33
+ Execute SQL：SELECT phone_id, phone_number, country_code, supplier, status, note, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_phone_number WHERE phone_id IN (9200004, 9200006, 9200005, 9200007, 9200008, 9200014, 9200013, 9200012, 9200011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:33
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_managed_account WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:33
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY account_id DESC LIMIT 10
+
+ Consume Time：1 ms 2026-04-13 03:18:33
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (2042187493571399682, 2042187493571399682, 2042187493571399682, 2042187493571399682, 2042187493571399682, 9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:33
+ Execute SQL：SELECT phone_id, phone_number, country_code, supplier, status, note, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_phone_number WHERE phone_id IN (9200004, 9200006, 9200005, 9200007, 9200008, 9200014, 9200013, 9200012, 9200011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:34
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:34
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY platform_id DESC LIMIT 200
+
+ Consume Time：0 ms 2026-04-13 03:18:34
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：2 ms 2026-04-13 03:18:34
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:34
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：1 ms 2026-04-13 03:18:34
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：1 ms 2026-04-13 03:18:34
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：6 ms 2026-04-13 03:18:34
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:34
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:34
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:34
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:18:34
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:34
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：1 ms 2026-04-13 03:18:34
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY platform_id DESC LIMIT 200
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 200
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_order_execution WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT execution_id, task_id, platform_id, account_id, product_id, purchase_quantity, flow_type, fulfillment_type, payment_mode, current_step, step_status, step_trace, payment_status, order_no, execution_status, result_message, raw_result, worker_id, attempt_count, heartbeat_at, started_at, executed_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_order_execution WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY execution_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300014, 9300013, 9300011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE task_id IN (9500014, 9500013, 9500011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：1 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_order_execution WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT execution_id, task_id, platform_id, account_id, product_id, purchase_quantity, flow_type, fulfillment_type, payment_mode, current_step, step_status, step_trace, payment_status, order_no, execution_status, result_message, raw_result, worker_id, attempt_count, heartbeat_at, started_at, executed_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_order_execution WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY execution_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300014, 9300013, 9300011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:18:41
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE task_id IN (9500014, 9500013, 9500011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:09
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:09
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:09
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:21:10
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:10
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:21:10
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:10
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:10
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:10
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY platform_id DESC LIMIT 200
+
+ Consume Time：0 ms 2026-04-13 03:21:10
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:10
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:21:10
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:10
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:21:10
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:31
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:31
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:31
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:21:31
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:31
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:21:31
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:31
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:31
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:31
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY platform_id DESC LIMIT 200
+
+ Consume Time：0 ms 2026-04-13 03:21:31
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:31
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:21:31
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:21:31
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:21:31
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:30
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:30
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:30
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:23:30
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:30
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:23:30
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:32
+ Execute SQL：SELECT user_id, dept_id, user_name, nick_name, user_type, email, phonenumber, sex, avatar, password, status, del_flag, login_ip, login_date, remark, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM sys_user WHERE user_id = 1 AND del_flag = '0' AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:32
+ Execute SQL：SELECT role_id, role_name, role_key, role_sort, data_scope, status FROM sys_role WHERE del_flag = '0' AND (role_id IN (SELECT role_id FROM sys_user_role WHERE user_id = 1)) AND tenant_id = '000000'
+
+ Consume Time：1 ms 2026-04-13 03:23:32
+ Execute SQL：SELECT menu_id, parent_id, menu_name, order_num, path, component, query_param, is_frame, is_cache, menu_type, visible, status, perms, icon, remark, create_dept, create_by, create_time, update_by, update_time FROM sys_menu WHERE (menu_type IN ('M', 'C') AND status = '0') ORDER BY parent_id ASC, order_num ASC
+
+ Consume Time：0 ms 2026-04-13 03:23:33
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:33
+ Execute SQL：SELECT id, tenant_id, contact_user_name, contact_phone, company_name, license_number, address, domain, intro, remark, package_id, expire_time, account_count, status, del_flag, create_dept, create_by, create_time, update_by, update_time FROM sys_tenant WHERE del_flag = '0' ORDER BY id ASC
+
+ Consume Time：0 ms 2026-04-13 03:23:33
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:33
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY platform_id DESC LIMIT 200
+
+ Consume Time：0 ms 2026-04-13 03:23:33
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:33
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:23:33
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:33
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:23:33
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:33
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：1 ms 2026-04-13 03:23:33
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:33
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:23:33
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:33
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：2 ms 2026-04-13 03:23:33
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:47
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE task_id = 9500014 AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:47
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id = 9100014 AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:47
+ Execute SQL：SELECT account_id FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id = 9500014) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:23:47
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：1 ms 2026-04-13 03:23:47
+ Execute SQL：INSERT INTO ticket_order_execution (execution_id, task_id, platform_id, account_id, product_id, purchase_quantity, flow_type, fulfillment_type, payment_mode, current_step, step_status, step_trace, payment_status, execution_status, result_message, attempt_count, create_dept, create_by, create_time, update_by, update_time, tenant_id) VALUES (2043409764667449345, 9500014, 9100014, 9300014, 'mock-sku-cart-pickup-cod-004', 1, 'cart_checkout', 'pickup_store', 'cod_store', 'queued', 'queued', '[]', 'offline_pending', 'queued', '等待调度', 0, 103, 1, '2026-04-13 03:23:47', 1, '2026-04-13 03:23:47', '000000')
+
+ Consume Time：5 ms 2026-04-13 03:23:47
+ Execute SQL：UPDATE ticket_sale_task SET platform_id = 9100014, product_id = 'mock-sku-cart-pickup-cod-004', task_name = 'Mock 加购门店付款', task_status = 'executing', order_flow_type = 'cart_checkout', fulfillment_type = 'pickup_store', payment_mode = 'cod_store', last_executed_time = '2026-04-13 03:23:47', purchase_quantity = 1, task_options = '{"pickupStoreCode":"store-shinjuku","mockBehavior":""}', remark = '测试加购门店付款', tenant_id = '000000', create_dept = 103, create_by = 1, create_time = '2026-04-13 02:51:58', update_by = 1, update_time = '2026-04-13 03:23:47' WHERE task_id = 9500014 AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：1 ms 2026-04-13 03:23:47
+ Execute SQL：INSERT INTO ticket_audit_event (audit_id, module_name, action_type, business_type, business_key, audit_status, message, payload, event_time, create_dept, create_by, create_time, update_by, update_time, tenant_id) VALUES (2043409764789084162, 'saleTask', 'execute', 'saleTask', '9500014', 'success', '商品抢购任务已启动', '{"taskId":9500014,"platformId":9100014,"productId":"mock-sku-cart-pickup-cod-004","accountCount":1}', '2026-04-13 03:23:47', 103, 1, '2026-04-13 03:23:47', 1, '2026-04-13 03:23:47', '000000')
+
+ Consume Time：0 ms 2026-04-13 03:23:47
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：4 ms 2026-04-13 03:23:47
+ Execute SQL：INSERT INTO sys_oper_log (oper_id, tenant_id, title, business_type, method, request_method, operator_type, oper_name, dept_name, oper_url, oper_ip, oper_location, oper_param, json_result, status, oper_time, cost_time) VALUES (2043409765044936706, '000000', '商品抢购任务', 0, 'org.dromara.ticket.controller.TicketSaleTaskController.execute()', 'POST', 1, 'admin', '研发部门', '/ticket/sale-task/9500014/execute', '0:0:0:0:0:0:0:1', '内网IP', '9500014', '{"code":200,"msg":"商品抢购任务已启动","data":"2043409764667449345"}', 0, '2026-04-13 03:23:47', 97)
+
+ Consume Time：0 ms 2026-04-13 03:23:47
+ Execute SQL：SELECT execution_id, task_id, platform_id, account_id, product_id, purchase_quantity, flow_type, fulfillment_type, payment_mode, current_step, step_status, step_trace, payment_status, order_no, execution_status, result_message, raw_result, worker_id, attempt_count, heartbeat_at, started_at, executed_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_order_execution WHERE del_flag = 0 AND (task_id = 9500014 AND create_time >= '2026-04-13 03:23:47') AND tenant_id = '000000' ORDER BY execution_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:23:47
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:47
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:23:47
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:47
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:23:47
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：1 ms 2026-04-13 03:23:47
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE task_id = 9500014 AND del_flag = 0
+
+ Consume Time：0 ms 2026-04-13 03:23:47
+ Execute SQL：SELECT execution_id, task_id, platform_id, account_id, product_id, purchase_quantity, flow_type, fulfillment_type, payment_mode, current_step, step_status, step_trace, payment_status, order_no, execution_status, result_message, raw_result, worker_id, attempt_count, heartbeat_at, started_at, executed_at, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_order_execution WHERE del_flag = 0 AND (task_id = 9500014 AND create_time >= '2026-04-13 03:23:47') ORDER BY execution_id ASC
+
+ Consume Time：5 ms 2026-04-13 03:23:47
+ Execute SQL：UPDATE ticket_sale_task SET platform_id = 9100014, product_id = 'mock-sku-cart-pickup-cod-004', task_name = 'Mock 加购门店付款', task_status = 'blocked', order_flow_type = 'cart_checkout', fulfillment_type = 'pickup_store', payment_mode = 'cod_store', last_executed_time = '2026-04-13 03:23:47', purchase_quantity = 1, task_options = '{"pickupStoreCode":"store-shinjuku","mockBehavior":""}', remark = '测试加购门店付款', tenant_id = '000000', create_dept = 103, create_by = 1, create_time = '2026-04-13 02:51:58', update_by = -1, update_time = '2026-04-13 03:23:47' WHERE task_id = 9500014 AND del_flag = 0
+
+ Consume Time：4 ms 2026-04-13 03:23:47
+ Execute SQL：INSERT INTO ticket_audit_event (audit_id, module_name, action_type, business_type, business_key, audit_status, message, payload, event_time, create_dept, create_by, create_time, update_by, update_time) VALUES (2043409765950906370, 'saleTask', 'dispatch', 'saleTask', '9500014', 'success', '商品抢购任务已分发到 Go 执行器', '{"taskId":9500014,"executionCount":1,"operator":1}', '2026-04-13 03:23:47', -1, -1, '2026-04-13 03:23:47', -1, '2026-04-13 03:23:47')
+
+ Consume Time：0 ms 2026-04-13 03:23:51
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:51
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:51
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：1 ms 2026-04-13 03:23:51
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:51
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:23:51
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:52
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:52
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:52
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:23:52
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:52
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:23:52
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:56
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_managed_account WHERE del_flag = 0 AND (platform_id = 9100013 AND login_status = 'logged_in') AND tenant_id = '000000'
+
+ Consume Time：1 ms 2026-04-13 03:23:56
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE del_flag = 0 AND (platform_id = 9100013 AND login_status = 'logged_in') AND tenant_id = '000000' ORDER BY account_id DESC LIMIT 1000
+
+ Consume Time：0 ms 2026-04-13 03:23:56
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100013) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:56
+ Execute SQL：SELECT phone_id, phone_number, country_code, supplier, status, note, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_phone_number WHERE phone_id IN (9200013) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:56
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_managed_account WHERE del_flag = 0 AND (platform_id = 9100013 AND login_status = 'logged_in') AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:56
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE del_flag = 0 AND (platform_id = 9100013 AND login_status = 'logged_in') AND tenant_id = '000000' ORDER BY account_id DESC LIMIT 1000
+
+ Consume Time：0 ms 2026-04-13 03:23:56
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100013) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:23:56
+ Execute SQL：SELECT phone_id, phone_number, country_code, supplier, status, note, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_phone_number WHERE phone_id IN (9200013) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:24:01
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:24:01
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:24:01
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:24:01
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:24:01
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:24:01
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：1 ms 2026-04-13 03:31:26
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:31:26
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:31:26
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:31:26
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:31:26
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:31:26
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:31:27
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:31:27
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:31:27
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY platform_id DESC LIMIT 200
+
+ Consume Time：0 ms 2026-04-13 03:31:27
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:31:27
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:31:27
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:31:27
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:31:27
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:31:40
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:31:40
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:31:40
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:31:40
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:31:40
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:31:40
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:31:40
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：1 ms 2026-04-13 03:31:40
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:31:40
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY platform_id DESC LIMIT 200
+
+ Consume Time：0 ms 2026-04-13 03:31:40
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:31:40
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:31:40
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:31:40
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:31:40
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:45:53
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:45:53
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:45:53
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:45:53
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:45:53
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:45:53
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:45:53
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND (task_status IN ('executing', 'pending_payment', 'partial', 'draft')) AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:45:53
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:45:53
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY platform_id DESC LIMIT 200
+
+ Consume Time：0 ms 2026-04-13 03:45:53
+ Execute SQL：SELECT COUNT(*) AS total FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:45:53
+ Execute SQL：SELECT task_id, platform_id, product_id, task_name, task_status, order_flow_type, fulfillment_type, payment_mode, warmup_time, scheduled_time, last_executed_time, purchase_quantity, task_options, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task WHERE del_flag = 0 AND tenant_id = '000000' ORDER BY task_id DESC LIMIT 10
+
+ Consume Time：0 ms 2026-04-13 03:45:53
+ Execute SQL：SELECT platform_id, platform_code, platform_name, adapter_type, environment, enabled, supports_batch_register, supports_batch_login, supports_sms, supports_email, supports_phone_identity, callback_url, order_submit_url, callback_secret_mask, registration_template, login_strategy, remark, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_platform_config WHERE platform_id IN (9100014, 9100013, 9100012, 9100011) AND del_flag = 0 AND tenant_id = '000000'
+
+ Consume Time：0 ms 2026-04-13 03:45:53
+ Execute SQL：SELECT binding_id, task_id, account_id, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_sale_task_account WHERE del_flag = 0 AND (task_id IN (9500014, 9500013, 9500012, 9500011)) AND tenant_id = '000000' ORDER BY binding_id ASC
+
+ Consume Time：0 ms 2026-04-13 03:45:53
+ Execute SQL：SELECT account_id, platform_id, phone_id, email, account_info, req_data, account_status, login_status, last_login_time, last_error, del_flag, tenant_id, create_dept, create_by, create_time, update_by, update_time FROM ticket_managed_account WHERE account_id IN (9300011, 9300012, 9300013, 9300014) AND del_flag = 0 AND tenant_id = '000000'
+

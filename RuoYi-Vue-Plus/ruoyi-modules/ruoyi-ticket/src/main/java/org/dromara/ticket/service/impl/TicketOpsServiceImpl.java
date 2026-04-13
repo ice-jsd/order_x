@@ -9,6 +9,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.dromara.common.core.domain.R;
 import org.dromara.common.core.exception.ServiceException;
 import org.dromara.common.core.utils.MapstructUtils;
@@ -19,16 +20,22 @@ import org.dromara.common.satoken.utils.LoginHelper;
 import org.dromara.common.sse.dto.SseMessageDto;
 import org.dromara.common.sse.utils.SseMessageUtils;
 import org.dromara.ticket.adapter.*;
+import org.dromara.ticket.config.TicketOrderExecutorProperties;
 import org.dromara.ticket.domain.*;
 import org.dromara.ticket.domain.bo.*;
 import org.dromara.ticket.domain.dto.TicketLoginProgressMessage;
+import org.dromara.ticket.domain.dto.TicketOrderDispatchRequest;
 import org.dromara.ticket.domain.dto.TicketRegisterProgressMessage;
 import org.dromara.ticket.domain.vo.*;
 import org.dromara.ticket.mapper.*;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.dromara.ticket.service.ITicketOpsService;
+import org.dromara.ticket.service.TicketOrderExecutorClient;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.*;
@@ -37,12 +44,16 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class TicketOpsServiceImpl implements ITicketOpsService {
 
     private static final Set<String> ACTIVE_RELATION_STATUSES = Set.of("registered", "logged_in", "registering", "verification_pending");
     private static final Set<String> ENABLED_PHONE_STATUSES = Set.of("available", "disabled");
     private static final Set<String> RUNNING_REGISTER_RELATION_STATUSES = Set.of("registering", "verification_pending");
+    private static final Set<String> EXECUTION_RUNNING_STATUSES = Set.of("running");
+    private static final Set<String> EXECUTION_PAYMENT_PENDING_STATUSES = Set.of("submitted", "pending_payment");
+    private static final Set<String> EXECUTION_FAILURE_STATUSES = Set.of("failed", "blocked", "timeout");
 
     private final TicketPlatformConfigMapper platformMapper;
     private final TicketPhoneNumberMapper phoneMapper;
@@ -54,9 +65,12 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
     private final TicketLoginBatchDetailMapper loginBatchDetailMapper;
     private final TicketEventConfigMapper eventMapper;
     private final TicketSaleTaskMapper saleTaskMapper;
+    private final TicketSaleTaskAccountMapper saleTaskAccountMapper;
     private final TicketOrderExecutionMapper orderExecutionMapper;
     private final TicketAuditEventMapper auditEventMapper;
     private final TicketPlatformAdapterRegistry adapterRegistry;
+    private final TicketOrderExecutorClient ticketOrderExecutorClient;
+    private final TicketOrderExecutorProperties ticketOrderExecutorProperties;
     private final TransactionTemplate transactionTemplate;
     @Qualifier("scheduledExecutorService")
     private final ScheduledExecutorService scheduledExecutorService;
@@ -167,7 +181,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         resultVo.setImportedCount(entities.size());
         resultVo.setSkippedCount(skipped.size());
         resultVo.setSkippedNumbers(skipped);
-        recordAudit("phone", "bulkImport", "phone", String.valueOf(entities.size()), "success", "鍙风爜鎵归噺瀵煎叆瀹屾垚", resultVo);
+        recordAudit("phone", "bulkImport", "phone", String.valueOf(entities.size()), "success", "号码批量导入完成", resultVo);
         return resultVo;
     }
 
@@ -291,7 +305,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             TicketPhonePlatformRelation relation = getRelation(platformId, phone.getPhoneId());
             if (relation != null && ACTIVE_RELATION_STATUSES.contains(relation.getStatus())) {
                 skipped++;
-                details.add(buildDetail(phone.getPhoneId(), "skipped", "鍚屽彿鍚屽钩鍙板凡瀛樺湪鏈夋晥鍏崇郴"));
+                details.add(buildDetail(phone.getPhoneId(), "skipped", "该平台已存在有效注册关系"));
                 continue;
             }
             TicketPhonePlatformRelation pendingRelation = relation == null ? new TicketPhonePlatformRelation() : relation;
@@ -317,8 +331,9 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
                 TicketManagedAccount account = getOrCreateAccount(platformId, phone.getPhoneId());
                 account.setPlatformId(platformId);
                 account.setPhoneId(phone.getPhoneId());
-                account.setAccountNo(result.getAccountNo());
-                account.setDisplayName(result.getDisplayName());
+                account.setEmail(result.getEmail());
+                account.setAccountInfo(result.getAccountInfo());
+                account.setReqData(result.getReqData());
                 account.setAccountStatus("registered");
                 account.setLoginStatus("offline");
                 account.setLastError(null);
@@ -362,10 +377,10 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
     @Override
     public TableDataInfo<TicketManagedAccountVo> selectAccountPage(TicketManagedAccountBo bo, PageQuery pageQuery) {
         LambdaQueryWrapper<TicketManagedAccount> wrapper = Wrappers.lambdaQuery();
-        wrapper.eq(ObjectUtil.isNotNull(bo.getPlatformId()), TicketManagedAccount::getPlatformId, bo.getPlatformId())
+        wrapper.eq(ObjectUtil.isNotNull(bo.getAccountId()), TicketManagedAccount::getAccountId, bo.getAccountId())
+            .eq(ObjectUtil.isNotNull(bo.getPlatformId()), TicketManagedAccount::getPlatformId, bo.getPlatformId())
             .eq(ObjectUtil.isNotNull(bo.getPhoneId()), TicketManagedAccount::getPhoneId, bo.getPhoneId())
-            .like(StringUtils.isNotBlank(bo.getAccountNo()), TicketManagedAccount::getAccountNo, bo.getAccountNo())
-            .like(StringUtils.isNotBlank(bo.getDisplayName()), TicketManagedAccount::getDisplayName, bo.getDisplayName())
+            .like(StringUtils.isNotBlank(bo.getEmail()), TicketManagedAccount::getEmail, bo.getEmail())
             .eq(StringUtils.isNotBlank(bo.getAccountStatus()), TicketManagedAccount::getAccountStatus, bo.getAccountStatus())
             .eq(StringUtils.isNotBlank(bo.getLoginStatus()), TicketManagedAccount::getLoginStatus, bo.getLoginStatus())
             .orderByDesc(TicketManagedAccount::getAccountId);
@@ -387,8 +402,8 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         }
         LambdaQueryWrapper<TicketManagedAccount> wrapper = Wrappers.lambdaQuery();
         wrapper.eq(TicketManagedAccount::getPlatformId, platformId)
-            .like(StringUtils.isNotBlank(bo.getAccountNo()), TicketManagedAccount::getAccountNo, bo.getAccountNo())
-            .like(StringUtils.isNotBlank(bo.getDisplayName()), TicketManagedAccount::getDisplayName, bo.getDisplayName())
+            .eq(ObjectUtil.isNotNull(bo.getAccountId()), TicketManagedAccount::getAccountId, bo.getAccountId())
+            .like(StringUtils.isNotBlank(bo.getEmail()), TicketManagedAccount::getEmail, bo.getEmail())
             .eq(StringUtils.isNotBlank(bo.getLoginStatus()), TicketManagedAccount::getLoginStatus, bo.getLoginStatus())
             .in(TicketManagedAccount::getPhoneId, availablePhoneIds)
             .eq(TicketManagedAccount::getAccountStatus, "registered")
@@ -534,11 +549,11 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
 
     @Override
     public TableDataInfo<TicketSaleTaskVo> selectSaleTaskPage(TicketSaleTaskBo bo, PageQuery pageQuery) {
+        refreshActiveSaleTaskStatuses();
         LambdaQueryWrapper<TicketSaleTask> wrapper = Wrappers.lambdaQuery();
         wrapper.eq(ObjectUtil.isNotNull(bo.getPlatformId()), TicketSaleTask::getPlatformId, bo.getPlatformId())
-            .eq(ObjectUtil.isNotNull(bo.getEventId()), TicketSaleTask::getEventId, bo.getEventId())
+            .eq(StringUtils.isNotBlank(bo.getProductId()), TicketSaleTask::getProductId, bo.getProductId())
             .like(StringUtils.isNotBlank(bo.getTaskName()), TicketSaleTask::getTaskName, bo.getTaskName())
-            .eq(StringUtils.isNotBlank(bo.getTaskMode()), TicketSaleTask::getTaskMode, bo.getTaskMode())
             .eq(StringUtils.isNotBlank(bo.getTaskStatus()), TicketSaleTask::getTaskStatus, bo.getTaskStatus())
             .orderByDesc(TicketSaleTask::getTaskId);
         Page<TicketSaleTaskVo> page = saleTaskMapper.selectVoPage(pageQuery.build(), wrapper);
@@ -548,6 +563,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
 
     @Override
     public TicketSaleTaskVo selectSaleTaskById(Long taskId) {
+        refreshSaleTaskStatus(taskId);
         TicketSaleTaskVo vo = saleTaskMapper.selectVoById(taskId);
         if (vo != null) {
             enrichSaleTasks(List.of(vo));
@@ -556,81 +572,153 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int saveSaleTask(TicketSaleTaskBo bo) {
+        validateSaleTaskAccounts(bo.getPlatformId(), bo.getAccountIds());
         TicketSaleTask entity = MapstructUtils.convert(bo, TicketSaleTask.class);
-        if (StringUtils.isBlank(entity.getTaskStatus())) {
-            entity.setTaskStatus("draft");
-        }
+        normalizeSaleTask(entity);
+        entity.setScheduleVersion(1L);
+        entity.setTaskStatus("draft");
+        entity.setLastExecutedTime(null);
         int rows = saleTaskMapper.insert(entity);
-        recordAudit("saleTask", "create", "saleTask", String.valueOf(entity.getTaskId()), "success", "閿€鍞换鍔″凡鍒涘缓", bo);
+        saveSaleTaskAccounts(entity.getTaskId(), bo.getAccountIds());
+        planSaleTaskSchedule(entity.getTaskId(), LoginHelper.getUserId(), "save", false);
+        recordAudit("saleTask", "create", "saleTask", String.valueOf(entity.getTaskId()), "success", "商品抢购任务已创建", bo);
         return rows;
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int updateSaleTask(TicketSaleTaskBo bo) {
+        validateSaleTaskAccounts(bo.getPlatformId(), bo.getAccountIds());
+        TicketSaleTask existing = saleTaskMapper.selectById(bo.getTaskId());
+        if (existing == null) {
+            throw new ServiceException("商品抢购任务不存在");
+        }
         TicketSaleTask entity = MapstructUtils.convert(bo, TicketSaleTask.class);
+        normalizeSaleTask(entity);
+        entity.setScheduleVersion(nextScheduleVersion(existing.getScheduleVersion()));
+        entity.setTaskStatus("draft");
+        entity.setLastExecutedTime(null);
         int rows = saleTaskMapper.updateById(entity);
-        recordAudit("saleTask", "update", "saleTask", String.valueOf(entity.getTaskId()), "success", "閿€鍞换鍔″凡鏇存柊", bo);
+        saveSaleTaskAccounts(entity.getTaskId(), bo.getAccountIds());
+        planSaleTaskSchedule(entity.getTaskId(), LoginHelper.getUserId(), "update", false);
+        recordAudit("saleTask", "update", "saleTask", String.valueOf(entity.getTaskId()), "success", "商品抢购任务已更新", bo);
         return rows;
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public int removeSaleTasks(Long[] taskIds) {
+        cleanupPendingSaleTaskSchedules(Arrays.asList(taskIds), "任务已删除，执行计划已取消");
+        saleTaskAccountMapper.delete(new LambdaQueryWrapper<TicketSaleTaskAccount>()
+            .in(TicketSaleTaskAccount::getTaskId, Arrays.asList(taskIds)));
         int rows = saleTaskMapper.deleteByIds(Arrays.asList(taskIds));
-        recordAudit("saleTask", "remove", "saleTask", Arrays.toString(taskIds), "success", "閿€鍞换鍔″凡鍒犻櫎", taskIds);
+        recordAudit("saleTask", "remove", "saleTask", Arrays.toString(taskIds), "success", "商品抢购任务已删除", taskIds);
         return rows;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public R<Long> executeSaleTask(Long taskId) {
+        Long executionId = executeSaleTaskInternal(taskId, LoginHelper.getUserId(), "manual");
+        return R.ok("商品抢购任务已重新排队，系统将立即执行", executionId);
+    }
+
+    private Long executeSaleTaskInternal(Long taskId, Long operatorUserId, String triggerSource) {
         TicketSaleTask task = saleTaskMapper.selectById(taskId);
         if (task == null) {
-            throw new ServiceException("閿€鍞换鍔′笉瀛樺湪");
+            throw new ServiceException("商品抢购任务不存在");
+        }
+        task.setScheduleVersion(nextScheduleVersion(task.getScheduleVersion()));
+        task.setTaskStatus("draft");
+        task.setLastExecutedTime(null);
+        saleTaskMapper.updateById(task);
+        return planSaleTaskSchedule(taskId, operatorUserId, triggerSource, true);
+    }
+
+    private Long planSaleTaskSchedule(Long taskId, Long operatorUserId, String triggerSource, boolean forceImmediate) {
+        TicketSaleTask task = saleTaskMapper.selectById(taskId);
+        if (task == null) {
+            throw new ServiceException("商品抢购任务不存在");
         }
         TicketPlatformConfig platform = requirePlatform(task.getPlatformId());
-        TicketPlatformAdapter adapter = adapterRegistry.getAdapter(platform.getAdapterType());
-        List<TicketManagedAccount> accounts = accountMapper.selectList(new LambdaQueryWrapper<TicketManagedAccount>()
-            .eq(TicketManagedAccount::getPlatformId, task.getPlatformId())
-            .in(TicketManagedAccount::getLoginStatus, "logged_in", "offline")
-            .last("limit 3"));
-
-        Map<String, Object> inventory = adapter.queryInventory(platform, task);
-        Map<String, Object> preparedOrder = adapter.prepareOrder(platform, task);
+        List<TicketManagedAccount> accounts = loadSaleTaskAccounts(task);
+        invalidateQueuedExecutions(taskId, "任务计划已重排，请以最新调度为准");
         if (CollUtil.isEmpty(accounts)) {
             TicketOrderExecution execution = new TicketOrderExecution();
             execution.setTaskId(taskId);
             execution.setPlatformId(task.getPlatformId());
+            execution.setProductId(task.getProductId());
+            execution.setPurchaseQuantity(task.getPurchaseQuantity());
+            execution.setFlowType(TicketOrderFlowSupport.defaultFlowType(task.getOrderFlowType()));
+            execution.setFulfillmentType(TicketOrderFlowSupport.defaultFulfillmentType(task.getFulfillmentType()));
+            execution.setPaymentMode(TicketOrderFlowSupport.defaultPaymentMode(task.getPaymentMode()));
+            execution.setScheduleVersion(defaultScheduleVersion(task.getScheduleVersion()));
+            execution.setCurrentStep("completed");
+            execution.setStepStatus("failed");
+            execution.setPaymentStatus(TicketOrderFlowSupport.initialPaymentStatus(task.getPaymentMode()));
             execution.setExecutionStatus("blocked");
-            execution.setResultMessage("No available account");
+            execution.setStepTrace("[]");
+            execution.setResultMessage("没有可执行的已登录账号");
             execution.setExecutedAt(new Date());
             orderExecutionMapper.insert(execution);
             task.setTaskStatus("blocked");
             task.setLastExecutedTime(new Date());
             saleTaskMapper.updateById(task);
-            recordAudit("saleTask", "execute", "saleTask", String.valueOf(taskId), "warn", "閿€鍞换鍔℃棤鍙敤璐﹀彿", Map.of("inventory", inventory, "prepared", preparedOrder));
-            return R.warn("鏆傛棤鍙敤璐﹀彿", execution.getExecutionId());
+            Map<String, Object> auditPayload = new LinkedHashMap<>();
+            auditPayload.put("taskId", taskId);
+            auditPayload.put("platformId", task.getPlatformId());
+            auditPayload.put("productId", task.getProductId());
+            auditPayload.put("triggerSource", triggerSource);
+            recordAudit("saleTask", "schedule", "saleTask", String.valueOf(taskId), "warn", "商品抢购任务无可用账号", auditPayload);
+            return execution.getExecutionId();
         }
 
-        Long lastExecutionId = null;
+        Date now = new Date();
+        Date dispatchTime = resolveTaskDispatchTime(task, forceImmediate);
+        List<TicketOrderExecution> executions = new ArrayList<>();
         for (TicketManagedAccount account : accounts) {
-            TicketOrderResult result = adapter.submitOrder(platform, task, account);
             TicketOrderExecution execution = new TicketOrderExecution();
             execution.setTaskId(taskId);
             execution.setPlatformId(task.getPlatformId());
             execution.setAccountId(account.getAccountId());
-            execution.setOrderNo(result.getOrderNo());
-            execution.setExecutionStatus(result.isSuccess() ? "submitted" : "failed");
-            execution.setResultMessage(result.getMessage());
-            execution.setExecutedAt(new Date());
+            execution.setProductId(task.getProductId());
+            execution.setPurchaseQuantity(task.getPurchaseQuantity());
+            execution.setFlowType(TicketOrderFlowSupport.defaultFlowType(task.getOrderFlowType()));
+            execution.setFulfillmentType(TicketOrderFlowSupport.defaultFulfillmentType(task.getFulfillmentType()));
+            execution.setPaymentMode(TicketOrderFlowSupport.defaultPaymentMode(task.getPaymentMode()));
+            execution.setScheduleVersion(defaultScheduleVersion(task.getScheduleVersion()));
+            execution.setCurrentStep("queued");
+            execution.setStepStatus("queued");
+            execution.setStepTrace("[]");
+            execution.setPaymentStatus(TicketOrderFlowSupport.initialPaymentStatus(task.getPaymentMode()));
+            execution.setExecutionStatus("queued");
+            execution.setResultMessage("等待调度");
+            execution.setRawResult(null);
+            execution.setWorkerId(null);
+            execution.setAttemptCount(0);
+            execution.setHeartbeatAt(null);
+            execution.setStartedAt(null);
+            execution.setExecutedAt(null);
             orderExecutionMapper.insert(execution);
-            lastExecutionId = execution.getExecutionId();
+            executions.add(execution);
         }
-        task.setTaskStatus("executed");
-        task.setLastExecutedTime(new Date());
+        task.setTaskStatus(dispatchTime.after(now) ? "draft" : "executing");
+        task.setLastExecutedTime(dispatchTime.after(now) ? null : now);
         saleTaskMapper.updateById(task);
-        recordAudit("saleTask", "execute", "saleTask", String.valueOf(taskId), "success", "閿€鍞换鍔″凡鎵ц(mock)", Map.of("inventory", inventory, "prepared", preparedOrder));
-        return R.ok("閿€鍞换鍔″凡鎵ц", lastExecutionId);
+
+        registerDispatchAfterCommit(task, platform, accounts, executions, operatorUserId, triggerSource, forceImmediate);
+
+        Map<String, Object> auditPayload = new LinkedHashMap<>();
+        auditPayload.put("taskId", taskId);
+        auditPayload.put("platformId", task.getPlatformId());
+        auditPayload.put("productId", task.getProductId());
+        auditPayload.put("accountCount", accounts.size());
+        auditPayload.put("triggerSource", triggerSource);
+        auditPayload.put("dispatchAt", dispatchTime);
+        recordAudit("saleTask", "schedule", "saleTask", String.valueOf(taskId), "success", "商品抢购任务已排队", auditPayload);
+        return executions.get(0).getExecutionId();
     }
 
     @Override
@@ -639,12 +727,40 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         wrapper.eq(ObjectUtil.isNotNull(bo.getTaskId()), TicketOrderExecution::getTaskId, bo.getTaskId())
             .eq(ObjectUtil.isNotNull(bo.getPlatformId()), TicketOrderExecution::getPlatformId, bo.getPlatformId())
             .eq(ObjectUtil.isNotNull(bo.getAccountId()), TicketOrderExecution::getAccountId, bo.getAccountId())
+            .eq(StringUtils.isNotBlank(bo.getProductId()), TicketOrderExecution::getProductId, bo.getProductId())
             .like(StringUtils.isNotBlank(bo.getOrderNo()), TicketOrderExecution::getOrderNo, bo.getOrderNo())
             .eq(StringUtils.isNotBlank(bo.getExecutionStatus()), TicketOrderExecution::getExecutionStatus, bo.getExecutionStatus())
+            .eq(StringUtils.isNotBlank(bo.getPaymentStatus()), TicketOrderExecution::getPaymentStatus, bo.getPaymentStatus())
             .orderByDesc(TicketOrderExecution::getExecutionId);
         Page<TicketOrderExecutionVo> page = orderExecutionMapper.selectVoPage(pageQuery.build(), wrapper);
         enrichOrderExecutions(page.getRecords());
         return TableDataInfo.build(page);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int markOrderExecutionPaid(Long executionId, TicketOrderExecutionPaymentBo bo) {
+        TicketOrderExecution execution = orderExecutionMapper.selectById(executionId);
+        if (execution == null) {
+            throw new ServiceException("下单执行记录不存在");
+        }
+        if (!EXECUTION_PAYMENT_PENDING_STATUSES.contains(execution.getExecutionStatus())) {
+            throw new ServiceException("当前执行状态不允许标记已支付");
+        }
+        execution.setExecutionStatus("paid");
+        execution.setPaymentStatus("paid");
+        execution.setCurrentStep("completed");
+        execution.setStepStatus("success");
+        execution.setResultMessage(bo.getResultMessage());
+        execution.setExecutedAt(new Date());
+        int rows = orderExecutionMapper.updateById(execution);
+        refreshSaleTaskStatus(execution.getTaskId());
+        Map<String, Object> auditPayload = new LinkedHashMap<>();
+        auditPayload.put("executionId", executionId);
+        auditPayload.put("taskId", execution.getTaskId());
+        auditPayload.put("orderNo", execution.getOrderNo());
+        recordAudit("orderExecution", "markPaid", "orderExecution", String.valueOf(executionId), "success", "订单已标记为已支付", auditPayload);
+        return rows;
     }
 
     @Override
@@ -662,15 +778,81 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public R<String> handleCallback(String platformCode, Map<String, Object> payload) {
-        TicketPlatformConfig platform = platformMapper.selectOne(new LambdaQueryWrapper<TicketPlatformConfig>()
-            .eq(TicketPlatformConfig::getPlatformCode, platformCode));
+        TicketPlatformConfig platform = findPlatformByCode(platformCode);
         if (platform == null) {
-            return R.fail("骞冲彴涓嶅瓨鍦? " + platformCode);
+            return R.fail("平台不存在: " + platformCode);
         }
         TicketPlatformAdapter adapter = adapterRegistry.getAdapter(platform.getAdapterType());
         String message = adapter.handleCallback(platform, payload);
         recordAudit("callback", "receive", "platform", platformCode, "success", message, payload);
         return R.ok(message);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public R<Void> reportExternalLoginSuccess(TicketExternalLoginReportBo bo) {
+        TicketPlatformConfig platform = findPlatformByCode(bo.getPlatformCode());
+        if (platform == null) {
+            return R.fail("平台不存在: " + bo.getPlatformCode());
+        }
+
+        List<TicketManagedAccount> accounts = accountMapper.selectList(new LambdaQueryWrapper<TicketManagedAccount>()
+            .eq(TicketManagedAccount::getPlatformId, platform.getPlatformId())
+            .eq(TicketManagedAccount::getEmail, bo.getEmail())
+            .orderByAsc(TicketManagedAccount::getAccountId)
+            .last("limit 2"));
+        if (CollUtil.isEmpty(accounts)) {
+            return R.fail("账号不存在: " + bo.getEmail());
+        }
+        if (accounts.size() > 1) {
+            return R.fail("账号数据异常，存在重复邮箱: " + bo.getEmail());
+        }
+
+        Date now = new Date();
+        TicketManagedAccount account = accounts.get(0);
+        account.setReqData(bo.getReqData());
+        account.setLoginStatus("logged_in");
+        account.setLastLoginTime(now);
+        account.setLastError(null);
+        accountMapper.updateById(account);
+
+        relationMapper.update(null, new LambdaUpdateWrapper<TicketPhonePlatformRelation>()
+            .set(TicketPhonePlatformRelation::getStatus, "logged_in")
+            .set(TicketPhonePlatformRelation::getLastError, null)
+            .set(TicketPhonePlatformRelation::getLastOperateTime, now)
+            .eq(TicketPhonePlatformRelation::getPlatformId, platform.getPlatformId())
+            .eq(TicketPhonePlatformRelation::getAccountId, account.getAccountId()));
+
+        Map<String, Object> auditPayload = new LinkedHashMap<>();
+        auditPayload.put("platformCode", bo.getPlatformCode());
+        auditPayload.put("email", bo.getEmail());
+        auditPayload.put("accountId", account.getAccountId());
+        auditPayload.put("reqData", bo.getReqData());
+        recordAudit("external_account", "loginSuccess", "account", String.valueOf(account.getAccountId()), "success", "external login reported", auditPayload);
+        return R.ok();
+    }
+
+    @Override
+    public R<TicketExternalOfflineAccountVo> fetchNextOfflineAccount(String platformCode) {
+        TicketPlatformConfig platform = findPlatformByCode(platformCode);
+        if (platform == null) {
+            return R.fail("平台不存在: " + platformCode);
+        }
+
+        TicketManagedAccount account = accountMapper.selectOne(new LambdaQueryWrapper<TicketManagedAccount>()
+            .eq(TicketManagedAccount::getPlatformId, platform.getPlatformId())
+            .eq(TicketManagedAccount::getAccountStatus, "registered")
+            .eq(TicketManagedAccount::getLoginStatus, "offline")
+            .orderByAsc(TicketManagedAccount::getAccountId)
+            .last("limit 1"), false);
+        if (account == null) {
+            return R.fail("没有需要登录的账号");
+        }
+
+        TicketExternalOfflineAccountVo vo = new TicketExternalOfflineAccountVo();
+        vo.setEmail(account.getEmail());
+        vo.setAccountInfo(account.getAccountInfo());
+        return R.ok(vo);
     }
 
     private void processRegistrationBatch(Long batchId, TicketPlatformConfig platform, List<Long> phoneIds, Long userId) {
@@ -715,7 +897,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             String finalStatus = failedCount > 0 ? "partial" : "completed";
             updateRegistrationBatch(batchId, finalStatus, successCount, failedCount, skippedCount, summary, new Date());
             publishBatchCompleted(batchId, platform, userId, successCount, failedCount, skippedCount, phoneIds.size());
-            recordAudit("registration", "finishBatch", "registrationBatch", String.valueOf(batchId), "success", "骞冲彴娉ㄥ唽浠诲姟瀹屾垚", Map.of(
+            recordAudit("registration", "finishBatch", "registrationBatch", String.valueOf(batchId), "success", "平台注册任务完成", Map.of(
                 "batchId", batchId,
                 "successCount", successCount,
                 "failedCount", failedCount,
@@ -724,7 +906,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         } catch (Exception ex) {
             updateRegistrationBatch(batchId, "blocked", successCount, failedCount, skippedCount, summary, new Date());
             publishBatchFailed(batchId, platform, userId, ex.getMessage(), successCount, failedCount, skippedCount, processedCount, phoneIds.size());
-            recordAudit("registration", "finishBatch", "registrationBatch", String.valueOf(batchId), "failed", "骞冲彴娉ㄥ唽浠诲姟寮傚父缁撴潫", Map.of(
+            recordAudit("registration", "finishBatch", "registrationBatch", String.valueOf(batchId), "failed", "平台注册任务异常结束", Map.of(
                 "batchId", batchId,
                 "message", StringUtils.defaultString(ex.getMessage(), "unknown")
             ));
@@ -749,13 +931,14 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
 
             TicketPhonePlatformRelation relation = getRelation(platform.getPlatformId(), phoneId);
             if (relation != null && ACTIVE_RELATION_STATUSES.contains(relation.getStatus())) {
-                String note = "宸茶烦杩? 璇ュ钩鍙板凡瀛樺湪鏈夋晥娉ㄥ唽鍏崇郴";
+                String note = "已跳过：该平台已存在有效注册关系";
                 phone.setNote(note);
                 phoneMapper.updateById(phone);
-                upsertRegistrationDetail(batchId, phoneId, platform.getPlatformId(), "skipped", note, relation.getAccountId(), null);
-                return RegistrationProgress.skipped(batchId, platform, phone, note, note);
+                TicketManagedAccount account = relation.getAccountId() == null ? null : accountMapper.selectById(relation.getAccountId());
+                upsertRegistrationDetail(batchId, phoneId, platform.getPlatformId(), "skipped", note, relation.getAccountId(), account == null ? null : account.getEmail());
+                return RegistrationProgress.skipped(batchId, platform, phone, note, note, account);
             }
-            phone.setNote(String.format("姝ｅ湪娉ㄥ唽 %s", platform.getPlatformName()));
+            phone.setNote(String.format("正在注册 %s", platform.getPlatformName()));
             phoneMapper.updateById(phone);
 
             TicketPhonePlatformRelation pendingRelation = relation == null ? new TicketPhonePlatformRelation() : relation;
@@ -766,7 +949,8 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             pendingRelation.setLastOperateTime(new Date());
             saveRelation(pendingRelation);
 
-            upsertRegistrationDetail(batchId, phoneId, platform.getPlatformId(), "processing", "姝ｅ湪娉ㄥ唽", pendingRelation.getAccountId(), null);
+            TicketManagedAccount account = pendingRelation.getAccountId() == null ? null : accountMapper.selectById(pendingRelation.getAccountId());
+            upsertRegistrationDetail(batchId, phoneId, platform.getPlatformId(), "processing", "正在注册", pendingRelation.getAccountId(), account == null ? null : account.getEmail());
             return RegistrationProgress.processing(batchId, platform, phone, phone.getNote());
         });
     }
@@ -785,8 +969,9 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
                 TicketManagedAccount account = getOrCreateAccount(platform.getPlatformId(), phone.getPhoneId());
                 account.setPlatformId(platform.getPlatformId());
                 account.setPhoneId(phone.getPhoneId());
-                account.setAccountNo(result.getAccountNo());
-                account.setDisplayName(result.getDisplayName());
+                account.setEmail(result.getEmail());
+                account.setAccountInfo(result.getAccountInfo());
+                account.setReqData(result.getReqData());
                 account.setAccountStatus("registered");
                 account.setLoginStatus("offline");
                 account.setLastError(null);
@@ -798,12 +983,12 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
                 relation.setLastOperateTime(new Date());
                 saveRelation(relation);
 
-                String note = String.format("宸叉敞鍐?%s%s", platform.getPlatformName(), StringUtils.isNotBlank(account.getAccountNo()) ? " / 璐﹀彿: " + account.getAccountNo() : "");
+                String note = String.format("已注册 %s%s", platform.getPlatformName(), StringUtils.isNotBlank(account.getEmail()) ? " / 邮箱: " + account.getEmail() : "");
                 currentPhone.setNote(note);
                 phoneMapper.updateById(currentPhone);
 
-                upsertRegistrationDetail(batchId, phone.getPhoneId(), platform.getPlatformId(), "success", StringUtils.defaultIfBlank(result.getMessage(), "娉ㄥ唽鎴愬姛"), account.getAccountId(), account.getAccountNo());
-                return RegistrationProgress.success(batchId, platform, currentPhone, StringUtils.defaultIfBlank(result.getMessage(), "娉ㄥ唽鎴愬姛"), note, account.getAccountId(), account.getAccountNo());
+                upsertRegistrationDetail(batchId, phone.getPhoneId(), platform.getPlatformId(), "success", StringUtils.defaultIfBlank(result.getMessage(), "注册成功"), account.getAccountId(), account.getEmail());
+                return RegistrationProgress.success(batchId, platform, currentPhone, StringUtils.defaultIfBlank(result.getMessage(), "注册成功"), note, account);
             }
 
             String error = adapter.normalizeError(result == null ? "register_result_missing" : result.getMessage());
@@ -811,11 +996,12 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             relation.setLastError(error);
             relation.setLastOperateTime(new Date());
             saveRelation(relation);
-            currentPhone.setNote("娉ㄥ唽澶辫触: " + error);
+            currentPhone.setNote("注册失败: " + error);
             phoneMapper.updateById(currentPhone);
 
-            upsertRegistrationDetail(batchId, phone.getPhoneId(), platform.getPlatformId(), "failed", error, relation.getAccountId(), null);
-            return RegistrationProgress.failed(batchId, platform, currentPhone, error, currentPhone.getNote(), relation.getAccountId());
+            TicketManagedAccount account = relation.getAccountId() == null ? null : accountMapper.selectById(relation.getAccountId());
+            upsertRegistrationDetail(batchId, phone.getPhoneId(), platform.getPlatformId(), "failed", error, relation.getAccountId(), account == null ? null : account.getEmail());
+            return RegistrationProgress.failed(batchId, platform, currentPhone, error, currentPhone.getNote(), account);
         });
     }
 
@@ -877,24 +1063,24 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         return transactionTemplate.execute(status -> {
             TicketManagedAccount account = accountMapper.selectById(accountId);
             if (account == null) {
-                upsertLoginDetail(batchId, accountId, platform.getPlatformId(), "failed", "账号不存在", null, null);
+                upsertLoginDetail(batchId, accountId, platform.getPlatformId(), "failed", "账号不存在", null);
                 return LoginProgress.failed(batchId, platform, null, null, "账号不存在");
             }
 
             TicketPhoneNumber phone = account.getPhoneId() == null ? null : phoneMapper.selectById(account.getPhoneId());
             if (!"registered".equals(account.getAccountStatus())) {
                 String message = "账号未注册，不允许登录";
-                upsertLoginDetail(batchId, accountId, platform.getPlatformId(), "failed", message, null, null);
+                upsertLoginDetail(batchId, accountId, platform.getPlatformId(), "failed", message, account.getReqData());
                 return LoginProgress.failed(batchId, platform, account, phone, message);
             }
 
             if (phone == null || !"available".equals(phone.getStatus())) {
                 String message = "号码不可用，不允许登录";
-                upsertLoginDetail(batchId, accountId, platform.getPlatformId(), "failed", message, null, null);
+                upsertLoginDetail(batchId, accountId, platform.getPlatformId(), "failed", message, account.getReqData());
                 return LoginProgress.failed(batchId, platform, account, phone, message);
             }
 
-            upsertLoginDetail(batchId, accountId, platform.getPlatformId(), "processing", "正在登录", null, null);
+            upsertLoginDetail(batchId, accountId, platform.getPlatformId(), "processing", "正在登录", account.getReqData());
             return LoginProgress.processing(batchId, platform, account, phone);
         });
     }
@@ -909,8 +1095,8 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
 
             if (result != null && result.isSuccess()) {
                 currentAccount.setLoginStatus("logged_in");
-                currentAccount.setSessionToken(result.getSessionToken());
-                currentAccount.setSessionExpireTime(result.getSessionExpireTime());
+                currentAccount.setAccountInfo(result.getAccountInfo());
+                currentAccount.setReqData(result.getReqData());
                 currentAccount.setLastLoginTime(new Date());
                 currentAccount.setLastError(null);
                 saveAccount(currentAccount);
@@ -923,7 +1109,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
                 }
 
                 String message = StringUtils.defaultIfBlank(result.getMessage(), "登录成功");
-                upsertLoginDetail(batchId, currentAccount.getAccountId(), platform.getPlatformId(), "success", message, result.getSessionToken(), result.getSessionExpireTime());
+                upsertLoginDetail(batchId, currentAccount.getAccountId(), platform.getPlatformId(), "success", message, currentAccount.getReqData());
                 return LoginProgress.success(batchId, platform, currentAccount, phone, message);
             }
 
@@ -939,7 +1125,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
                 saveRelation(relation);
             }
 
-            upsertLoginDetail(batchId, currentAccount.getAccountId(), platform.getPlatformId(), "failed", error, null, null);
+            upsertLoginDetail(batchId, currentAccount.getAccountId(), platform.getPlatformId(), "failed", error, currentAccount.getReqData());
             return LoginProgress.failed(batchId, platform, currentAccount, phone, error);
         });
     }
@@ -957,7 +1143,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         loginBatchMapper.update(null, wrapper);
     }
 
-    private void upsertLoginDetail(Long batchId, Long accountId, Long platformId, String executeStatus, String resultMessage, String sessionToken, Date sessionExpireTime) {
+    private void upsertLoginDetail(Long batchId, Long accountId, Long platformId, String executeStatus, String resultMessage, String reqData) {
         TicketLoginBatchDetail detail = loginBatchDetailMapper.selectOne(new LambdaQueryWrapper<TicketLoginBatchDetail>()
             .eq(TicketLoginBatchDetail::getBatchId, batchId)
             .eq(TicketLoginBatchDetail::getAccountId, accountId), false);
@@ -969,8 +1155,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         }
         detail.setExecuteStatus(executeStatus);
         detail.setResultMessage(resultMessage);
-        detail.setSessionToken(sessionToken);
-        detail.setSessionExpireTime(sessionExpireTime);
+        detail.setReqData(reqData);
         detail.setExecutedAt(new Date());
         if (detail.getDetailId() == null) {
             loginBatchDetailMapper.insert(detail);
@@ -990,12 +1175,13 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         message.setPlatformName(progress.getPlatformName());
         message.setAccountId(progress.getAccountId());
         message.setPhoneId(progress.getPhoneId());
-        message.setAccountNo(progress.getAccountNo());
+        message.setEmail(progress.getEmail());
+        message.setAccountInfo(progress.getAccountInfo());
+        message.setReqData(progress.getReqData());
         message.setPhoneNumber(progress.getPhoneNumber());
         message.setStepStatus(progress.getStepStatus());
         message.setLoginStatus(progress.getLoginStatus());
         message.setLastError(progress.getLastError());
-        message.setSessionExpireTime(progress.getSessionExpireTime());
         message.setLastLoginTime(progress.getLastLoginTime());
         message.setMessage(progress.getMessage());
         message.setSuccessCount(successCount);
@@ -1061,7 +1247,9 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         message.setPhoneStatus(progress.getPhoneStatus());
         message.setNote(progress.getNote());
         message.setAccountId(progress.getAccountId());
-        message.setAccountNo(progress.getAccountNo());
+        message.setEmail(progress.getEmail());
+        message.setAccountInfo(progress.getAccountInfo());
+        message.setReqData(progress.getReqData());
         message.setMessage(progress.getMessage());
         message.setSuccessCount(successCount);
         message.setFailedCount(failedCount);
@@ -1081,7 +1269,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         message.setPlatformId(platform.getPlatformId());
         message.setPlatformName(platform.getPlatformName());
         message.setStepStatus("completed");
-        message.setMessage("娉ㄥ唽鎵规鎵ц瀹屾垚");
+        message.setMessage("注册批次执行完成");
         message.setSuccessCount(successCount);
         message.setFailedCount(failedCount);
         message.setSkippedCount(skippedCount);
@@ -1099,7 +1287,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         message.setPlatformId(platform.getPlatformId());
         message.setPlatformName(platform.getPlatformName());
         message.setStepStatus("completed");
-        message.setMessage("娉ㄥ唽鎵规寮傚父缁撴潫: " + StringUtils.defaultString(rawMessage, "unknown"));
+        message.setMessage("注册批次异常结束: " + StringUtils.defaultString(rawMessage, "unknown"));
         message.setSuccessCount(successCount);
         message.setFailedCount(failedCount);
         message.setSkippedCount(skippedCount);
@@ -1139,7 +1327,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         registrationBatchMapper.update(null, wrapper);
     }
 
-    private void upsertRegistrationDetail(Long batchId, Long phoneId, Long platformId, String executeStatus, String resultMessage, Long accountId, String accountNo) {
+    private void upsertRegistrationDetail(Long batchId, Long phoneId, Long platformId, String executeStatus, String resultMessage, Long accountId, String email) {
         TicketRegistrationBatchDetail detail = registrationBatchDetailMapper.selectOne(new LambdaQueryWrapper<TicketRegistrationBatchDetail>()
             .eq(TicketRegistrationBatchDetail::getBatchId, batchId)
             .eq(TicketRegistrationBatchDetail::getPhoneId, phoneId), false);
@@ -1152,7 +1340,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         detail.setExecuteStatus(executeStatus);
         detail.setResultMessage(resultMessage);
         detail.setAccountId(accountId);
-        detail.setAccountNo(accountNo);
+        detail.setEmail(email);
         detail.setExecutedAt(new Date());
         if (detail.getDetailId() == null) {
             registrationBatchDetailMapper.insert(detail);
@@ -1167,6 +1355,19 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             throw new ServiceException("Platform not found");
         }
         return platform;
+    }
+
+    private TicketPlatformConfig findPlatformByCode(String platformCode) {
+        List<TicketPlatformConfig> platforms = platformMapper.selectList(new LambdaQueryWrapper<TicketPlatformConfig>()
+            .eq(TicketPlatformConfig::getPlatformCode, platformCode)
+            .last("limit 2"));
+        if (CollUtil.isEmpty(platforms)) {
+            return null;
+        }
+        if (platforms.size() > 1) {
+            throw new ServiceException("Platform code is duplicated: " + platformCode);
+        }
+        return platforms.get(0);
     }
 
     private List<TicketPhoneNumber> loadPhonesForRegister(TicketBatchRegisterBo bo) {
@@ -1283,7 +1484,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             }
             TicketManagedAccount account = accountMap.get(row.getAccountId());
             if (account != null) {
-                row.setAccountNo(account.getAccountNo());
+                row.setEmail(account.getEmail());
             }
         }
     }
@@ -1325,6 +1526,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         }
         Map<Long, TicketPhoneNumber> phoneMap = loadMap(rows.stream().map(TicketRegistrationBatchDetailVo::getPhoneId).filter(Objects::nonNull).toList(), phoneMapper::selectByIds, TicketPhoneNumber::getPhoneId);
         Map<Long, TicketPlatformConfig> platformMap = loadMap(rows.stream().map(TicketRegistrationBatchDetailVo::getPlatformId).filter(Objects::nonNull).toList(), platformMapper::selectByIds, TicketPlatformConfig::getPlatformId);
+        Map<Long, TicketManagedAccount> accountMap = loadMap(rows.stream().map(TicketRegistrationBatchDetailVo::getAccountId).filter(Objects::nonNull).toList(), accountMapper::selectByIds, TicketManagedAccount::getAccountId);
         for (TicketRegistrationBatchDetailVo row : rows) {
             TicketPhoneNumber phone = phoneMap.get(row.getPhoneId());
             if (phone != null) {
@@ -1333,6 +1535,12 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             TicketPlatformConfig platform = platformMap.get(row.getPlatformId());
             if (platform != null) {
                 row.setPlatformName(platform.getPlatformName());
+            }
+            TicketManagedAccount account = accountMap.get(row.getAccountId());
+            if (account != null) {
+                row.setEmail(account.getEmail());
+                row.setAccountInfo(account.getAccountInfo());
+                row.setReqData(account.getReqData());
             }
         }
     }
@@ -1360,7 +1568,8 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         for (TicketLoginBatchDetailVo row : rows) {
             TicketManagedAccount account = accountMap.get(row.getAccountId());
             if (account != null) {
-                row.setAccountNo(account.getAccountNo());
+                row.setEmail(account.getEmail());
+                row.setAccountInfo(account.getAccountInfo());
                 TicketPhoneNumber phone = phoneMap.get(account.getPhoneId());
                 if (phone != null) {
                     row.setPhoneNumber(phone.getPhoneNumber());
@@ -1390,17 +1599,36 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         if (CollUtil.isEmpty(rows)) {
             return;
         }
+        rows.forEach(this::normalizeSaleTaskView);
         Map<Long, TicketPlatformConfig> platformMap = loadMap(rows.stream().map(TicketSaleTaskVo::getPlatformId).filter(Objects::nonNull).toList(), platformMapper::selectByIds, TicketPlatformConfig::getPlatformId);
-        Map<Long, TicketEventConfig> eventMap = loadMap(rows.stream().map(TicketSaleTaskVo::getEventId).filter(Objects::nonNull).toList(), eventMapper::selectByIds, TicketEventConfig::getEventId);
+        List<Long> taskIds = rows.stream().map(TicketSaleTaskVo::getTaskId).filter(Objects::nonNull).toList();
+        Map<Long, List<TicketSaleTaskAccount>> bindingMap = saleTaskAccountMapper.selectList(new LambdaQueryWrapper<TicketSaleTaskAccount>()
+                .in(CollUtil.isNotEmpty(taskIds), TicketSaleTaskAccount::getTaskId, taskIds)
+                .orderByAsc(TicketSaleTaskAccount::getBindingId))
+            .stream()
+            .collect(Collectors.groupingBy(TicketSaleTaskAccount::getTaskId, LinkedHashMap::new, Collectors.toList()));
+        Map<Long, TicketManagedAccount> accountMap = loadMap(bindingMap.values().stream()
+            .flatMap(Collection::stream)
+            .map(TicketSaleTaskAccount::getAccountId)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList(), accountMapper::selectByIds, TicketManagedAccount::getAccountId);
         for (TicketSaleTaskVo row : rows) {
             TicketPlatformConfig platform = platformMap.get(row.getPlatformId());
             if (platform != null) {
                 row.setPlatformName(platform.getPlatformName());
             }
-            TicketEventConfig event = eventMap.get(row.getEventId());
-            if (event != null) {
-                row.setEventName(event.getEventName());
-            }
+            List<TicketSaleTaskAccount> bindings = bindingMap.getOrDefault(row.getTaskId(), List.of());
+            List<Long> accountIds = bindings.stream().map(TicketSaleTaskAccount::getAccountId).filter(Objects::nonNull).toList();
+            List<String> emails = accountIds.stream()
+                .map(accountMap::get)
+                .filter(Objects::nonNull)
+                .map(TicketManagedAccount::getEmail)
+                .filter(StringUtils::isNotBlank)
+                .toList();
+            row.setAccountIds(accountIds);
+            row.setBoundAccountCount(accountIds.size());
+            row.setAccountEmails(CollUtil.isEmpty(emails) ? null : String.join(" / ", emails));
         }
     }
 
@@ -1418,13 +1646,381 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             }
             TicketManagedAccount account = accountMap.get(row.getAccountId());
             if (account != null) {
-                row.setAccountNo(account.getAccountNo());
+                row.setEmail(account.getEmail());
+                row.setAccountInfo(account.getAccountInfo());
+                row.setReqData(account.getReqData());
             }
             TicketSaleTask task = taskMap.get(row.getTaskId());
             if (task != null) {
                 row.setTaskName(task.getTaskName());
+                if (StringUtils.isBlank(row.getProductId())) {
+                    row.setProductId(task.getProductId());
+                }
+                if (row.getPurchaseQuantity() == null) {
+                    row.setPurchaseQuantity(task.getPurchaseQuantity());
+                }
+                if (StringUtils.isBlank(row.getFlowType())) {
+                    row.setFlowType(TicketOrderFlowSupport.defaultFlowType(task.getOrderFlowType()));
+                }
+                if (StringUtils.isBlank(row.getFulfillmentType())) {
+                    row.setFulfillmentType(TicketOrderFlowSupport.defaultFulfillmentType(task.getFulfillmentType()));
+                }
+                if (StringUtils.isBlank(row.getPaymentMode())) {
+                    row.setPaymentMode(TicketOrderFlowSupport.defaultPaymentMode(task.getPaymentMode()));
+                }
             }
         }
+    }
+
+    private void validateSaleTaskAccounts(Long platformId, List<Long> accountIds) {
+        if (ObjectUtil.isNull(platformId)) {
+            throw new ServiceException("请选择目标平台");
+        }
+        if (CollUtil.isEmpty(accountIds)) {
+            throw new ServiceException("请至少绑定一个已登录账号");
+        }
+        List<TicketManagedAccount> accounts = accountMapper.selectByIds(CollUtil.distinct(accountIds));
+        if (accounts.size() != CollUtil.distinct(accountIds).size()) {
+            throw new ServiceException("绑定账号中包含不存在的账号");
+        }
+        boolean hasInvalidAccount = accounts.stream().anyMatch(account ->
+            !Objects.equals(account.getPlatformId(), platformId)
+                || !"registered".equals(account.getAccountStatus())
+                || !"logged_in".equals(account.getLoginStatus())
+                || StringUtils.isBlank(account.getReqData())
+        );
+        if (hasInvalidAccount) {
+            throw new ServiceException("只能绑定目标平台下已登录且带会话上下文的账号");
+        }
+    }
+
+    private void saveSaleTaskAccounts(Long taskId, List<Long> accountIds) {
+        saleTaskAccountMapper.delete(new LambdaQueryWrapper<TicketSaleTaskAccount>()
+            .eq(TicketSaleTaskAccount::getTaskId, taskId));
+        List<Long> distinctAccountIds = CollUtil.distinct(accountIds);
+        if (CollUtil.isEmpty(distinctAccountIds)) {
+            return;
+        }
+        List<TicketSaleTaskAccount> bindings = distinctAccountIds.stream().map(accountId -> {
+            TicketSaleTaskAccount binding = new TicketSaleTaskAccount();
+            binding.setTaskId(taskId);
+            binding.setAccountId(accountId);
+            return binding;
+        }).toList();
+        saleTaskAccountMapper.insertBatch(bindings);
+    }
+
+    private List<TicketManagedAccount> loadSaleTaskAccounts(TicketSaleTask task) {
+        List<Long> accountIds = saleTaskAccountMapper.selectList(new LambdaQueryWrapper<TicketSaleTaskAccount>()
+                .select(TicketSaleTaskAccount::getAccountId)
+                .eq(TicketSaleTaskAccount::getTaskId, task.getTaskId())
+                .orderByAsc(TicketSaleTaskAccount::getBindingId))
+            .stream()
+            .map(TicketSaleTaskAccount::getAccountId)
+            .filter(Objects::nonNull)
+            .toList();
+        if (CollUtil.isEmpty(accountIds)) {
+            return List.of();
+        }
+        return accountMapper.selectByIds(accountIds).stream()
+            .filter(account -> Objects.equals(account.getPlatformId(), task.getPlatformId()))
+            .filter(account -> "registered".equals(account.getAccountStatus()))
+            .filter(account -> "logged_in".equals(account.getLoginStatus()))
+            .filter(account -> StringUtils.isNotBlank(account.getReqData()))
+            .sorted(Comparator.comparing(TicketManagedAccount::getAccountId))
+            .toList();
+    }
+
+    private void dispatchSaleTask(TicketSaleTask task, TicketPlatformConfig platform, List<TicketManagedAccount> accounts,
+                                  List<TicketOrderExecution> executions, Long userId, String triggerSource, boolean forceImmediate) {
+        normalizeSaleTask(task);
+        Map<Long, TicketOrderExecution> executionMap = executions.stream()
+            .collect(Collectors.toMap(TicketOrderExecution::getAccountId, Function.identity(), (left, right) -> right));
+        TicketPlatformAdapter adapter = adapterRegistry.getAdapter(platform.getAdapterType());
+
+        for (TicketManagedAccount account : accounts) {
+            TicketOrderExecution execution = executionMap.get(account.getAccountId());
+            if (execution == null) {
+                continue;
+            }
+            try {
+                TicketOrderFlowDefinition flowDefinition = adapter.buildOrderFlow(platform, task, account);
+                TicketOrderDispatchRequest request = new TicketOrderDispatchRequest();
+                request.setExecutionId(execution.getExecutionId());
+                request.setTaskId(task.getTaskId());
+                request.setPlatformId(platform.getPlatformId());
+                request.setPlatformCode(platform.getPlatformCode());
+                request.setPlatformName(platform.getPlatformName());
+                request.setAdapterType(platform.getAdapterType());
+                request.setOrderSubmitUrl(platform.getOrderSubmitUrl());
+                request.setAccountId(account.getAccountId());
+                request.setEmail(account.getEmail());
+                request.setAccountInfo(account.getAccountInfo());
+                request.setReqData(account.getReqData());
+                request.setProductId(task.getProductId());
+                request.setPurchaseQuantity(task.getPurchaseQuantity());
+                request.setScheduleVersion(defaultScheduleVersion(task.getScheduleVersion()));
+                request.setOrderFlowType(flowDefinition.getFlowType());
+                request.setFulfillmentType(flowDefinition.getFulfillmentType());
+                request.setPaymentMode(flowDefinition.getPaymentMode());
+                request.setTaskOptions(task.getTaskOptions());
+                request.setFlowSteps(flowDefinition.getSteps());
+                request.setScheduledTime(forceImmediate ? null : task.getScheduledTime());
+                request.setWarmupTime(forceImmediate ? null : task.getWarmupTime());
+                log.info("dispatch purchase execution to redis, taskId={}, executionId={}, accountId={}, scheduleVersion={}, scheduledTime={}, warmupTime={}",
+                    task.getTaskId(), execution.getExecutionId(), account.getAccountId(), request.getScheduleVersion(), request.getScheduledTime(), request.getWarmupTime());
+                ticketOrderExecutorClient.dispatchByRedis(request);
+            } catch (Exception ex) {
+                log.error("dispatch purchase execution failed, taskId={}, executionId={}, accountId={}",
+                    task.getTaskId(), execution.getExecutionId(), account.getAccountId(), ex);
+                TicketOrderExecution current = orderExecutionMapper.selectById(execution.getExecutionId());
+                if (current != null && "queued".equals(current.getExecutionStatus())) {
+                    current.setExecutionStatus("blocked");
+                    current.setStepStatus("failed");
+                    current.setResultMessage(StringUtils.defaultString(ex.getMessage(), "Go 执行器调度失败"));
+                    current.setExecutedAt(new Date());
+                    orderExecutionMapper.updateById(current);
+                }
+                Map<String, Object> failedAuditPayload = new LinkedHashMap<>();
+                failedAuditPayload.put("taskId", task.getTaskId());
+                failedAuditPayload.put("executionId", execution.getExecutionId());
+                failedAuditPayload.put("accountId", account.getAccountId());
+                failedAuditPayload.put("message", StringUtils.defaultString(ex.getMessage(), "unknown"));
+                recordAudit("saleTask", "dispatch", "orderExecution", String.valueOf(execution.getExecutionId()), "failed", "商品抢购任务调度失败", failedAuditPayload);
+            }
+        }
+        refreshSaleTaskStatus(task.getTaskId());
+        Map<String, Object> dispatchAuditPayload = new LinkedHashMap<>();
+        dispatchAuditPayload.put("taskId", task.getTaskId());
+        dispatchAuditPayload.put("executionCount", executions.size());
+        dispatchAuditPayload.put("operator", userId);
+        dispatchAuditPayload.put("triggerSource", triggerSource);
+        dispatchAuditPayload.put("forceImmediate", forceImmediate);
+        recordAudit("saleTask", "dispatch", "saleTask", String.valueOf(task.getTaskId()), "success", "商品抢购任务已写入执行队列", dispatchAuditPayload);
+    }
+
+    @Scheduled(initialDelay = 5000L, fixedDelay = 5000L)
+    public void refreshSaleTaskExecutionStates() {
+        try {
+            markTimeoutExecutions();
+            refreshActiveSaleTaskStatuses();
+        } catch (Exception ex) {
+            // 定时刷新只负责兜底汇总，不应影响主业务线程。
+        }
+    }
+
+    private void refreshActiveSaleTaskStatuses() {
+        List<TicketSaleTask> tasks = saleTaskMapper.selectList(new LambdaQueryWrapper<TicketSaleTask>()
+            .in(TicketSaleTask::getTaskStatus, List.of("executing", "pending_payment", "partial", "draft")));
+        for (TicketSaleTask task : tasks) {
+            refreshSaleTaskStatus(task.getTaskId(), task);
+        }
+    }
+
+    private void markTimeoutExecutions() {
+        long heartbeatTimeoutSeconds = Math.max(ticketOrderExecutorProperties.getHeartbeatTimeoutSeconds(), 5L);
+        Date cutoff = new Date(System.currentTimeMillis() - heartbeatTimeoutSeconds * 1000L);
+        List<TicketOrderExecution> staleExecutions = orderExecutionMapper.selectList(new LambdaQueryWrapper<TicketOrderExecution>()
+            .eq(TicketOrderExecution::getExecutionStatus, "running")
+            .and(wrapper -> wrapper.lt(TicketOrderExecution::getHeartbeatAt, cutoff)
+                .or()
+                .isNull(TicketOrderExecution::getHeartbeatAt)
+                .lt(TicketOrderExecution::getStartedAt, cutoff))
+            .orderByAsc(TicketOrderExecution::getExecutionId));
+        for (TicketOrderExecution execution : staleExecutions) {
+            LambdaUpdateWrapper<TicketOrderExecution> updateWrapper = Wrappers.lambdaUpdate();
+            updateWrapper.eq(TicketOrderExecution::getExecutionId, execution.getExecutionId())
+                .eq(TicketOrderExecution::getExecutionStatus, "running")
+                .set(TicketOrderExecution::getExecutionStatus, "timeout")
+                .set(TicketOrderExecution::getStepStatus, "failed")
+                .set(TicketOrderExecution::getResultMessage, "执行心跳超时")
+                .set(TicketOrderExecution::getExecutedAt, new Date());
+            orderExecutionMapper.update(null, updateWrapper);
+        }
+    }
+
+    private void normalizeSaleTask(TicketSaleTask task) {
+        if (task == null) {
+            return;
+        }
+        if (StringUtils.isBlank(task.getTaskStatus())) {
+            task.setTaskStatus("draft");
+        }
+        if (task.getScheduleVersion() == null || task.getScheduleVersion() <= 0) {
+            task.setScheduleVersion(1L);
+        }
+        task.setOrderFlowType(TicketOrderFlowSupport.defaultFlowType(task.getOrderFlowType()));
+        task.setFulfillmentType(TicketOrderFlowSupport.defaultFulfillmentType(task.getFulfillmentType()));
+        task.setPaymentMode(TicketOrderFlowSupport.defaultPaymentMode(task.getPaymentMode()));
+        if (task.getPurchaseQuantity() == null || task.getPurchaseQuantity() <= 0) {
+            task.setPurchaseQuantity(1);
+        }
+        if (StringUtils.isBlank(task.getTaskOptions())) {
+            task.setTaskOptions("{}");
+        } else if (!JSONUtil.isTypeJSON(task.getTaskOptions())) {
+            throw new ServiceException("平台扩展参数必须是合法 JSON");
+        }
+    }
+
+    private void normalizeSaleTaskView(TicketSaleTaskVo row) {
+        row.setOrderFlowType(TicketOrderFlowSupport.defaultFlowType(row.getOrderFlowType()));
+        row.setFulfillmentType(TicketOrderFlowSupport.defaultFulfillmentType(row.getFulfillmentType()));
+        row.setPaymentMode(TicketOrderFlowSupport.defaultPaymentMode(row.getPaymentMode()));
+        if (StringUtils.isBlank(row.getTaskOptions())) {
+            row.setTaskOptions("{}");
+        }
+    }
+
+    private void refreshSaleTaskStatus(Long taskId) {
+        if (taskId == null) {
+            return;
+        }
+        TicketSaleTask task = saleTaskMapper.selectById(taskId);
+        refreshSaleTaskStatus(taskId, task);
+    }
+
+    private void refreshSaleTaskStatus(Long taskId, TicketSaleTask task) {
+        if (taskId == null || task == null) {
+            return;
+        }
+        List<TicketOrderExecution> executions = orderExecutionMapper.selectList(new LambdaQueryWrapper<TicketOrderExecution>()
+            .eq(TicketOrderExecution::getTaskId, taskId)
+            .eq(TicketOrderExecution::getScheduleVersion, defaultScheduleVersion(task.getScheduleVersion()))
+            .orderByAsc(TicketOrderExecution::getExecutionId));
+        if (CollUtil.isEmpty(executions)) {
+            return;
+        }
+        String nextStatus = calculateSaleTaskStatus(task, executions);
+        boolean shouldUpdate = !Objects.equals(task.getTaskStatus(), nextStatus);
+        if (!"draft".equals(nextStatus) && task.getLastExecutedTime() == null) {
+            task.setLastExecutedTime(new Date());
+            shouldUpdate = true;
+        }
+        if (shouldUpdate) {
+            task.setTaskStatus(nextStatus);
+            saleTaskMapper.updateById(task);
+        }
+    }
+
+    private String calculateSaleTaskStatus(TicketSaleTask task, List<TicketOrderExecution> executions) {
+        boolean hasRunning = executions.stream().anyMatch(item -> EXECUTION_RUNNING_STATUSES.contains(item.getExecutionStatus()));
+        if (hasRunning) {
+            return "executing";
+        }
+        boolean allQueued = executions.stream().allMatch(item -> "queued".equals(item.getExecutionStatus()));
+        if (allQueued) {
+            return "draft".equals(task.getTaskStatus()) ? "draft" : "executing";
+        }
+        boolean hasPendingPayment = executions.stream().anyMatch(item -> EXECUTION_PAYMENT_PENDING_STATUSES.contains(item.getExecutionStatus()));
+        boolean hasPaid = executions.stream().anyMatch(item -> "paid".equals(item.getExecutionStatus()));
+        boolean hasFailure = executions.stream().anyMatch(item -> EXECUTION_FAILURE_STATUSES.contains(item.getExecutionStatus()));
+        boolean allBlocked = executions.stream().allMatch(item -> "blocked".equals(item.getExecutionStatus()));
+        boolean allFailed = executions.stream().allMatch(item -> EXECUTION_FAILURE_STATUSES.contains(item.getExecutionStatus()));
+        boolean allPaid = executions.stream().allMatch(item -> "paid".equals(item.getExecutionStatus()));
+
+        if (allPaid) {
+            return "paid";
+        }
+        if (allBlocked) {
+            return "blocked";
+        }
+        if (allFailed) {
+            return "failed";
+        }
+        if (hasPendingPayment && !hasFailure && !hasPaid) {
+            return "pending_payment";
+        }
+        if ((hasPendingPayment || hasPaid) && hasFailure) {
+            return "partial";
+        }
+        if (hasPendingPayment || hasPaid) {
+            return hasPaid && !hasPendingPayment ? "paid" : "pending_payment";
+        }
+        return "failed";
+    }
+
+    private void cleanupPendingSaleTaskSchedules(List<Long> taskIds, String message) {
+        if (CollUtil.isEmpty(taskIds)) {
+            return;
+        }
+        List<TicketOrderExecution> queuedExecutions = orderExecutionMapper.selectList(new LambdaQueryWrapper<TicketOrderExecution>()
+            .in(TicketOrderExecution::getTaskId, taskIds)
+            .eq(TicketOrderExecution::getExecutionStatus, "queued")
+            .orderByAsc(TicketOrderExecution::getExecutionId));
+        blockQueuedExecutions(queuedExecutions, message);
+    }
+
+    private void invalidateQueuedExecutions(Long taskId, String message) {
+        if (taskId == null) {
+            return;
+        }
+        List<TicketOrderExecution> queuedExecutions = orderExecutionMapper.selectList(new LambdaQueryWrapper<TicketOrderExecution>()
+            .eq(TicketOrderExecution::getTaskId, taskId)
+            .eq(TicketOrderExecution::getExecutionStatus, "queued")
+            .orderByAsc(TicketOrderExecution::getExecutionId));
+        blockQueuedExecutions(queuedExecutions, message);
+    }
+
+    private void blockQueuedExecutions(List<TicketOrderExecution> executions, String message) {
+        if (CollUtil.isEmpty(executions)) {
+            return;
+        }
+        Date now = new Date();
+        for (TicketOrderExecution execution : executions) {
+            log.warn("block queued execution, executionId={}, taskId={}, reason={}", execution.getExecutionId(), execution.getTaskId(), message);
+            ticketOrderExecutorClient.removeDelayedExecution(execution.getExecutionId());
+            LambdaUpdateWrapper<TicketOrderExecution> updateWrapper = Wrappers.lambdaUpdate();
+            updateWrapper.eq(TicketOrderExecution::getExecutionId, execution.getExecutionId())
+                .eq(TicketOrderExecution::getExecutionStatus, "queued")
+                .set(TicketOrderExecution::getExecutionStatus, "blocked")
+                .set(TicketOrderExecution::getCurrentStep, "completed")
+                .set(TicketOrderExecution::getStepStatus, "failed")
+                .set(TicketOrderExecution::getResultMessage, message)
+                .set(TicketOrderExecution::getExecutedAt, now);
+            orderExecutionMapper.update(null, updateWrapper);
+        }
+    }
+
+    private void registerDispatchAfterCommit(TicketSaleTask task, TicketPlatformConfig platform, List<TicketManagedAccount> accounts,
+                                             List<TicketOrderExecution> executions, Long operatorUserId, String triggerSource,
+                                             boolean forceImmediate) {
+        log.info("register purchase task dispatch after commit, taskId={}, executionCount={}, triggerSource={}, forceImmediate={}",
+            task.getTaskId(), executions.size(), triggerSource, forceImmediate);
+        Runnable dispatchAction = () -> scheduledExecutorService.execute(
+            () -> dispatchSaleTask(task, platform, accounts, executions, operatorUserId, triggerSource, forceImmediate)
+        );
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            dispatchAction.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                dispatchAction.run();
+            }
+        });
+    }
+
+    private Date resolveTaskDispatchTime(TicketSaleTask task, boolean forceImmediate) {
+        if (forceImmediate) {
+            return new Date();
+        }
+        Date now = new Date();
+        if (task.getWarmupTime() != null && task.getWarmupTime().after(now)) {
+            return task.getWarmupTime();
+        }
+        if (task.getScheduledTime() != null && task.getScheduledTime().after(now)) {
+            return task.getScheduledTime();
+        }
+        return now;
+    }
+
+    private Long nextScheduleVersion(Long currentVersion) {
+        return defaultScheduleVersion(currentVersion) + 1L;
+    }
+
+    private Long defaultScheduleVersion(Long currentVersion) {
+        return currentVersion == null || currentVersion <= 0 ? 1L : currentVersion;
     }
 
     private static final class LoginProgress {
@@ -1434,12 +2030,13 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         private String platformName;
         private Long accountId;
         private Long phoneId;
-        private String accountNo;
+        private String email;
+        private String accountInfo;
+        private String reqData;
         private String phoneNumber;
         private String stepStatus;
         private String loginStatus;
         private String lastError;
-        private Date sessionExpireTime;
         private Date lastLoginTime;
         private String message;
         private TicketManagedAccount account;
@@ -1458,7 +2055,6 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             progress.stepStatus = "success";
             progress.loginStatus = account == null ? null : account.getLoginStatus();
             progress.lastError = account == null ? null : account.getLastError();
-            progress.sessionExpireTime = account == null ? null : account.getSessionExpireTime();
             progress.lastLoginTime = account == null ? null : account.getLastLoginTime();
             progress.message = message;
             progress.account = account;
@@ -1470,7 +2066,6 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             progress.stepStatus = "failed";
             progress.loginStatus = account == null ? null : account.getLoginStatus();
             progress.lastError = account == null ? message : account.getLastError();
-            progress.sessionExpireTime = account == null ? null : account.getSessionExpireTime();
             progress.lastLoginTime = account == null ? null : account.getLastLoginTime();
             progress.message = message;
             progress.account = account;
@@ -1484,7 +2079,9 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             progress.platformName = platform.getPlatformName();
             progress.accountId = account == null ? null : account.getAccountId();
             progress.phoneId = account == null ? null : account.getPhoneId();
-            progress.accountNo = account == null ? null : account.getAccountNo();
+            progress.email = account == null ? null : account.getEmail();
+            progress.accountInfo = account == null ? null : account.getAccountInfo();
+            progress.reqData = account == null ? null : account.getReqData();
             progress.phoneNumber = phone == null ? null : phone.getPhoneNumber();
             return progress;
         }
@@ -1509,8 +2106,16 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             return phoneId;
         }
 
-        private String getAccountNo() {
-            return accountNo;
+        private String getEmail() {
+            return email;
+        }
+
+        private String getAccountInfo() {
+            return accountInfo;
+        }
+
+        private String getReqData() {
+            return reqData;
         }
 
         private String getPhoneNumber() {
@@ -1527,10 +2132,6 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
 
         private String getLastError() {
             return lastError;
-        }
-
-        private Date getSessionExpireTime() {
-            return sessionExpireTime;
         }
 
         private Date getLastLoginTime() {
@@ -1557,7 +2158,9 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         private String phoneStatus;
         private String note;
         private Long accountId;
-        private String accountNo;
+        private String email;
+        private String accountInfo;
+        private String reqData;
         private String message;
         private TicketPhoneNumber phone;
 
@@ -1566,39 +2169,48 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             progress.stepStatus = "processing";
             progress.phoneStatus = phone == null ? null : phone.getStatus();
             progress.note = note;
-            progress.message = "姝ｅ湪娉ㄥ唽";
+            progress.message = "正在注册";
             progress.phone = phone;
             return progress;
         }
 
-        private static RegistrationProgress success(Long batchId, TicketPlatformConfig platform, TicketPhoneNumber phone, String message, String note, Long accountId, String accountNo) {
+        private static RegistrationProgress success(Long batchId, TicketPlatformConfig platform, TicketPhoneNumber phone, String message, String note, TicketManagedAccount account) {
             RegistrationProgress progress = base(batchId, platform, phone);
             progress.stepStatus = "success";
             progress.phoneStatus = phone == null ? null : phone.getStatus();
             progress.note = note;
-            progress.accountId = accountId;
-            progress.accountNo = accountNo;
+            progress.accountId = account == null ? null : account.getAccountId();
+            progress.email = account == null ? null : account.getEmail();
+            progress.accountInfo = account == null ? null : account.getAccountInfo();
+            progress.reqData = account == null ? null : account.getReqData();
             progress.message = message;
             progress.phone = phone;
             return progress;
         }
 
-        private static RegistrationProgress failed(Long batchId, TicketPlatformConfig platform, TicketPhoneNumber phone, String message, String note, Long accountId) {
+        private static RegistrationProgress failed(Long batchId, TicketPlatformConfig platform, TicketPhoneNumber phone, String message, String note, TicketManagedAccount account) {
             RegistrationProgress progress = base(batchId, platform, phone);
             progress.stepStatus = "failed";
             progress.phoneStatus = phone == null ? null : phone.getStatus();
             progress.note = note;
-            progress.accountId = accountId;
+            progress.accountId = account == null ? null : account.getAccountId();
+            progress.email = account == null ? null : account.getEmail();
+            progress.accountInfo = account == null ? null : account.getAccountInfo();
+            progress.reqData = account == null ? null : account.getReqData();
             progress.message = message;
             progress.phone = phone;
             return progress;
         }
 
-        private static RegistrationProgress skipped(Long batchId, TicketPlatformConfig platform, TicketPhoneNumber phone, String message, String note) {
+        private static RegistrationProgress skipped(Long batchId, TicketPlatformConfig platform, TicketPhoneNumber phone, String message, String note, TicketManagedAccount account) {
             RegistrationProgress progress = base(batchId, platform, phone);
             progress.stepStatus = "skipped";
             progress.phoneStatus = phone == null ? null : phone.getStatus();
             progress.note = note;
+            progress.accountId = account == null ? null : account.getAccountId();
+            progress.email = account == null ? null : account.getEmail();
+            progress.accountInfo = account == null ? null : account.getAccountInfo();
+            progress.reqData = account == null ? null : account.getReqData();
             progress.message = message;
             progress.phone = phone;
             return progress;
@@ -1650,8 +2262,16 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             return accountId;
         }
 
-        private String getAccountNo() {
-            return accountNo;
+        private String getEmail() {
+            return email;
+        }
+
+        private String getAccountInfo() {
+            return accountInfo;
+        }
+
+        private String getReqData() {
+            return reqData;
         }
 
         private String getMessage() {

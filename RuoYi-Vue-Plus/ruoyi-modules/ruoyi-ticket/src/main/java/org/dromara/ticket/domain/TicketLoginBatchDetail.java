@@ -26,8 +26,7 @@ public class TicketLoginBatchDetail extends TenantEntity {
     private Long platformId;
     private String executeStatus;
     private String resultMessage;
-    private String sessionToken;
-    private Date sessionExpireTime;
+    private String reqData;
     private Date executedAt;
 
     @TableLogic

@@ -7,6 +7,7 @@ import org.dromara.ticket.domain.TicketSaleTask;
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Date;
+import java.util.List;
 
 @Data
 @AutoMapper(target = TicketSaleTask.class)
@@ -18,15 +19,20 @@ public class TicketSaleTaskVo implements Serializable {
     private Long taskId;
     private String tenantId;
     private Long platformId;
-    private Long eventId;
+    private String productId;
     private String taskName;
-    private String taskMode;
     private String taskStatus;
+    private String orderFlowType;
+    private String fulfillmentType;
+    private String paymentMode;
     private Date warmupTime;
     private Date scheduledTime;
     private Date lastExecutedTime;
-    private String ruleConfig;
+    private Integer purchaseQuantity;
+    private String taskOptions;
     private String remark;
     private String platformName;
-    private String eventName;
+    private List<Long> accountIds;
+    private Integer boundAccountCount;
+    private String accountEmails;
 }

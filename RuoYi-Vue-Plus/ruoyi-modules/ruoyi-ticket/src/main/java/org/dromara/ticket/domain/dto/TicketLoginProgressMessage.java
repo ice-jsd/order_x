@@ -13,12 +13,13 @@ public class TicketLoginProgressMessage {
     private String platformName;
     private Long accountId;
     private Long phoneId;
-    private String accountNo;
+    private String email;
+    private String accountInfo;
+    private String reqData;
     private String phoneNumber;
     private String stepStatus;
     private String loginStatus;
     private String lastError;
-    private Date sessionExpireTime;
     private Date lastLoginTime;
     private String message;
     private Integer successCount;

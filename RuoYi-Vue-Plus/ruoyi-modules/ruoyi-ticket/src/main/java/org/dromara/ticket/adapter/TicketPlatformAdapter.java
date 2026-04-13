@@ -22,9 +22,11 @@ public interface TicketPlatformAdapter {
 
     Map<String, Object> queryInventory(TicketPlatformConfig platform, TicketSaleTask saleTask);
 
-    Map<String, Object> prepareOrder(TicketPlatformConfig platform, TicketSaleTask saleTask);
+    TicketOrderFlowDefinition buildOrderFlow(TicketPlatformConfig platform, TicketSaleTask saleTask, TicketManagedAccount account);
 
-    TicketOrderResult submitOrder(TicketPlatformConfig platform, TicketSaleTask saleTask, TicketManagedAccount account);
+    TicketOrderResult executeStep(TicketPlatformConfig platform, TicketOrderFlowContext context, TicketOrderFlowStep step);
+
+    TicketOrderResult finalizeOrder(TicketPlatformConfig platform, TicketOrderFlowContext context);
 
     Map<String, Object> getOrderStatus(TicketPlatformConfig platform, String orderNo);
 

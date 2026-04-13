@@ -25,5 +25,5 @@ public class TicketPhonePlatformRelationVo implements Serializable {
     private Date lastOperateTime;
     private String phoneNumber;
     private String platformName;
-    private String accountNo;
+    private String email;
 }

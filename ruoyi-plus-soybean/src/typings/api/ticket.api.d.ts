@@ -18,12 +18,11 @@ declare namespace Api {
       adapterType: string;
       environment: string;
       enabled: boolean;
-      supportsBatchRegister: boolean;
-      supportsBatchLogin: boolean;
       supportsSms: boolean;
       supportsEmail: boolean;
       supportsPhoneIdentity: boolean;
       callbackUrl: string;
+      orderSubmitUrl: string;
       callbackSecretMask: string;
       registrationTemplate: string;
       loginStrategy: string;
@@ -41,12 +40,11 @@ declare namespace Api {
       adapterType: string;
       environment: string;
       enabled: boolean;
-      supportsBatchRegister: boolean;
-      supportsBatchLogin: boolean;
       supportsSms: boolean;
       supportsEmail: boolean;
       supportsPhoneIdentity: boolean;
       callbackUrl: string;
+      orderSubmitUrl: string;
       callbackSecretMask: string;
       registrationTemplate: string;
       loginStrategy: string;
@@ -68,10 +66,6 @@ declare namespace Api {
 
     type PhoneSearchParams = CommonType.RecordNullable<
       Pick<Phone, 'phoneNumber' | 'countryCode' | 'supplier' | 'status'> & Api.Common.CommonSearchParams
-    >;
-
-    type PhoneRegisterableSearchParams = CommonType.RecordNullable<
-      Pick<Phone, 'phoneNumber' | 'countryCode'> & Api.Common.CommonSearchParams
     >;
 
     type PhoneImportParams = CommonType.RecordNullable<{
@@ -106,7 +100,7 @@ declare namespace Api {
       lastOperateTime: string;
       phoneNumber: string;
       platformName: string;
-      accountNo: string;
+      email: string;
     }>;
 
     type RelationSearchParams = CommonType.RecordNullable<
@@ -119,100 +113,27 @@ declare namespace Api {
       accountId: CommonType.IdType;
       platformId: CommonType.IdType;
       phoneId: CommonType.IdType;
-      accountNo: string;
-      displayName: string;
+      email: string;
+      accountInfo?: string;
+      reqData?: string;
       accountStatus: string;
       loginStatus: string;
-      sessionExpireTime: string;
       lastLoginTime: string;
       lastError?: string;
       platformName: string;
       phoneNumber: string;
     }>;
 
-    type AccountSearchParams = CommonType.RecordNullable<
-      Pick<Account, 'platformId' | 'phoneId' | 'accountNo' | 'displayName' | 'accountStatus' | 'loginStatus'> &
-        Api.Common.CommonSearchParams
-    >;
+    type AccountSearchParams = CommonType.RecordNullable<{
+      accountId: number;
+      platformId: CommonType.IdType;
+      phoneId: CommonType.IdType;
+      email: string;
+      accountStatus: string;
+      loginStatus: string;
+    } & Api.Common.CommonSearchParams>;
 
     type AccountList = Api.Common.PaginatingQueryRecord<Account>;
-
-    type BatchRegisterParams = CommonType.RecordNullable<{
-      phoneIds: CommonType.IdType[];
-    }>;
-
-    type BatchLoginParams = CommonType.RecordNullable<{
-      accountIds: CommonType.IdType[];
-      loginStatus: string;
-    }>;
-
-    type RegistrationBatch = Common.CommonTenantRecord<{
-      batchId: CommonType.IdType;
-      platformId: CommonType.IdType;
-      batchNo: string;
-      batchStatus: BatchStatus | string;
-      totalCount: number;
-      successCount: number;
-      skippedCount: number;
-      failedCount: number;
-      resultSummary: string;
-      executedAt: string;
-      platformName: string;
-    }>;
-
-    type RegistrationBatchDetail = Common.CommonTenantRecord<{
-      detailId: CommonType.IdType;
-      batchId: CommonType.IdType;
-      phoneId: CommonType.IdType;
-      platformId: CommonType.IdType;
-      executeStatus: 'processing' | 'success' | 'failed' | 'skipped' | string;
-      resultMessage: string;
-      accountId?: CommonType.IdType;
-      accountNo?: string;
-      executedAt: string;
-      phoneNumber?: string;
-      platformName?: string;
-    }>;
-
-    type RegistrationBatchSearchParams = CommonType.RecordNullable<
-      Pick<RegistrationBatch, 'platformId' | 'batchNo' | 'batchStatus'> & Api.Common.CommonSearchParams
-    >;
-
-    type RegistrationBatchList = Api.Common.PaginatingQueryRecord<RegistrationBatch>;
-
-    type LoginBatch = Common.CommonTenantRecord<{
-      batchId: CommonType.IdType;
-      platformId: CommonType.IdType;
-      batchNo: string;
-      batchStatus: BatchStatus | string;
-      totalCount: number;
-      successCount: number;
-      failedCount: number;
-      resultSummary: string;
-      executedAt: string;
-      platformName: string;
-    }>;
-
-    type LoginBatchDetail = Common.CommonTenantRecord<{
-      detailId: CommonType.IdType;
-      batchId: CommonType.IdType;
-      accountId: CommonType.IdType;
-      platformId: CommonType.IdType;
-      executeStatus: 'processing' | 'success' | 'failed' | string;
-      resultMessage: string;
-      sessionToken?: string;
-      sessionExpireTime?: string;
-      executedAt: string;
-      accountNo?: string;
-      phoneNumber?: string;
-      platformName?: string;
-    }>;
-
-    type LoginBatchSearchParams = CommonType.RecordNullable<
-      Pick<LoginBatch, 'platformId' | 'batchNo' | 'batchStatus'> & Api.Common.CommonSearchParams
-    >;
-
-    type LoginBatchList = Api.Common.PaginatingQueryRecord<LoginBatch>;
 
     type Event = Common.CommonTenantRecord<{
       eventId: CommonType.IdType;
@@ -246,34 +167,43 @@ declare namespace Api {
     type SaleTask = Common.CommonTenantRecord<{
       taskId: CommonType.IdType;
       platformId: CommonType.IdType;
-      eventId: CommonType.IdType;
+      productId: string;
       taskName: string;
-      taskMode: string;
       taskStatus: string;
+      orderFlowType: string;
+      fulfillmentType: string;
+      paymentMode: string;
       warmupTime: string;
       scheduledTime: string;
       lastExecutedTime: string;
-      ruleConfig: string;
+      purchaseQuantity: number;
+      taskOptions?: string;
       remark?: string;
       platformName: string;
-      eventName: string;
+      accountIds?: CommonType.IdType[];
+      boundAccountCount?: number;
+      accountEmails?: string;
     }>;
 
     type SaleTaskSearchParams = CommonType.RecordNullable<
-      Pick<SaleTask, 'platformId' | 'eventId' | 'taskName' | 'taskMode' | 'taskStatus'> & Api.Common.CommonSearchParams
+      Pick<SaleTask, 'platformId' | 'productId' | 'taskName' | 'taskStatus'> & Api.Common.CommonSearchParams
     >;
 
     type SaleTaskOperateParams = CommonType.RecordNullable<{
       taskId: CommonType.IdType;
       platformId: CommonType.IdType;
-      eventId: CommonType.IdType;
+      productId: string;
       taskName: string;
-      taskMode: string;
       taskStatus: string;
+      orderFlowType: string;
+      fulfillmentType: string;
+      paymentMode: string;
       warmupTime: string;
       scheduledTime: string;
-      ruleConfig: string;
+      purchaseQuantity: number;
+      taskOptions: string;
       remark: string;
+      accountIds: CommonType.IdType[];
     }>;
 
     type SaleTaskList = Api.Common.PaginatingQueryRecord<SaleTask>;
@@ -283,21 +213,37 @@ declare namespace Api {
       taskId: CommonType.IdType;
       platformId: CommonType.IdType;
       accountId: CommonType.IdType;
+      productId: string;
+      purchaseQuantity: number;
+      flowType: string;
+      fulfillmentType: string;
+      paymentMode: string;
+      currentStep: string;
+      stepStatus: string;
+      stepTrace?: string;
+      paymentStatus: string;
       orderNo: string;
       executionStatus: string;
       resultMessage: string;
+      rawResult?: string;
       executedAt: string;
       platformName: string;
-      accountNo: string;
+      email: string;
+      accountInfo?: string;
+      reqData?: string;
       taskName: string;
     }>;
 
     type OrderExecutionSearchParams = CommonType.RecordNullable<
-      Pick<OrderExecution, 'taskId' | 'platformId' | 'accountId' | 'orderNo' | 'executionStatus'> &
+      Pick<OrderExecution, 'taskId' | 'platformId' | 'accountId' | 'productId' | 'orderNo' | 'executionStatus' | 'paymentStatus'> &
         Api.Common.CommonSearchParams
     >;
 
     type OrderExecutionList = Api.Common.PaginatingQueryRecord<OrderExecution>;
+
+    type OrderExecutionPaymentParams = {
+      resultMessage: string;
+    };
 
     type AuditLog = Common.CommonTenantRecord<{
       auditId: CommonType.IdType;
@@ -317,47 +263,5 @@ declare namespace Api {
 
     type AuditLogList = Api.Common.PaginatingQueryRecord<AuditLog>;
 
-    type RegisterProgressMessage = {
-      module: 'ticket_register';
-      batchId: CommonType.IdType;
-      platformId: CommonType.IdType;
-      platformName: string;
-      phoneId?: CommonType.IdType;
-      phoneNumber?: string;
-      stepStatus: 'processing' | 'success' | 'failed' | 'skipped' | 'completed' | string;
-      phoneStatus?: string;
-      note?: string;
-      accountId?: CommonType.IdType;
-      accountNo?: string;
-      message: string;
-      successCount: number;
-      failedCount: number;
-      skippedCount: number;
-      processedCount: number;
-      totalCount: number;
-      registeredPlatformCount?: number;
-      loggedInPlatformCount?: number;
-    };
-
-    type LoginProgressMessage = {
-      module: 'ticket_login';
-      batchId: CommonType.IdType;
-      platformId: CommonType.IdType;
-      platformName: string;
-      accountId?: CommonType.IdType;
-      phoneId?: CommonType.IdType;
-      accountNo?: string;
-      phoneNumber?: string;
-      stepStatus: 'processing' | 'success' | 'failed' | 'completed' | string;
-      loginStatus?: string;
-      lastError?: string;
-      sessionExpireTime?: string;
-      lastLoginTime?: string;
-      message: string;
-      successCount: number;
-      failedCount: number;
-      processedCount: number;
-      totalCount: number;
-    };
   }
 }

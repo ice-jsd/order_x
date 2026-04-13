@@ -15,7 +15,9 @@ public class TicketRegisterProgressMessage {
     private String phoneStatus;
     private String note;
     private Long accountId;
-    private String accountNo;
+    private String email;
+    private String accountInfo;
+    private String reqData;
     private String message;
     private Integer successCount;
     private Integer failedCount;

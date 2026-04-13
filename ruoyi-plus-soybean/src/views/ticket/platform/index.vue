@@ -1,16 +1,15 @@
 <script setup lang="tsx">
-import { computed, onMounted, ref } from 'vue';
-import { NButton, NPopconfirm } from 'naive-ui';
+import { computed, onMounted, reactive, ref } from 'vue';
+import { NButton, NSwitch } from 'naive-ui';
 import { useAuth } from '@/hooks/business/auth';
 import { defaultTransform, useNaivePaginatedTable } from '@/hooks/common/table';
 import {
   fetchCreateTicketPlatform,
-  fetchDeleteTicketPlatform,
   fetchGetTicketPlatformList,
   fetchUpdateTicketPlatform
 } from '@/service/api/ticket';
 import { useAppStore } from '@/store/modules/app';
-import { renderTicketEllipsis, renderTicketTag } from '../common';
+import { renderTicketEllipsis } from '../common';
 
 defineOptions({
   name: 'TicketPlatformList'
@@ -26,12 +25,11 @@ interface PlatformFormModel {
   adapterType: string;
   environment: string;
   enabled: boolean;
-  supportsBatchRegister: boolean;
-  supportsBatchLogin: boolean;
   supportsSms: boolean;
   supportsEmail: boolean;
   supportsPhoneIdentity: boolean;
   callbackUrl: string;
+  orderSubmitUrl: string;
   callbackSecretMask: string;
   registrationTemplate: string;
   loginStrategy: string;
@@ -57,12 +55,11 @@ function createFormModel(): PlatformFormModel {
     adapterType: 'mock',
     environment: 'sandbox',
     enabled: true,
-    supportsBatchRegister: true,
-    supportsBatchLogin: true,
     supportsSms: false,
     supportsEmail: true,
     supportsPhoneIdentity: true,
     callbackUrl: '',
+    orderSubmitUrl: '',
     callbackSecretMask: '',
     registrationTemplate: '',
     loginStrategy: '',
@@ -75,6 +72,7 @@ const checkedRowKeys = ref<CommonType.IdType[]>([]);
 const modalVisible = ref(false);
 const operateType = ref<NaiveUI.TableOperateType>('add');
 const formModel = ref<PlatformFormModel>(createFormModel());
+const statusLoadingMap = reactive<Record<string, boolean>>({});
 const enabledSelectOptions = [
   { label: '启用', value: 'true' },
   { label: '停用', value: 'false' }
@@ -107,13 +105,6 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
       { key: 'adapterType', title: '适配器', align: 'center', width: 100 },
       { key: 'environment', title: '环境', align: 'center', width: 100 },
       {
-        key: 'enabled',
-        title: '状态',
-        align: 'center',
-        width: 90,
-        render: row => renderTicketTag(row.enabled)
-      },
-      {
         key: 'capabilities',
         title: '能力开关',
         align: 'center',
@@ -121,8 +112,6 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
         render: row =>
           renderTicketEllipsis(
             [
-              row.supportsBatchRegister ? '批量注册' : null,
-              row.supportsBatchLogin ? '批量登录' : null,
               row.supportsSms ? '短信' : null,
               row.supportsEmail ? '邮箱' : null,
               row.supportsPhoneIdentity ? '号码身份' : null
@@ -149,7 +138,7 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
         key: 'operate',
         title: '操作',
         align: 'center',
-        width: 160,
+        width: 100,
         render: row => (
           <div class="flex-center gap-8px">
             {hasAuth('ticket:platform:edit') && (
@@ -157,20 +146,26 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
                 编辑
               </NButton>
             )}
-            {hasAuth('ticket:platform:remove') && (
-              <NPopconfirm onPositiveClick={() => handleDelete([row.platformId])}>
-                {{
-                  trigger: () => (
-                    <NButton text type="error">
-                      删除
-                    </NButton>
-                  ),
-                  default: () => '确认删除该平台吗？'
-                }}
-              </NPopconfirm>
-            )}
           </div>
         )
+      },
+      {
+        key: 'enabled',
+        title: '启用',
+        align: 'center',
+        width: 110,
+        render: row => {
+          const rowKey = String(row.platformId);
+          return (
+            <NSwitch
+              value={row.enabled}
+              size="small"
+              loading={statusLoadingMap[rowKey]}
+              disabled={!hasAuth('ticket:platform:edit')}
+              onUpdateValue={value => handleTogglePlatformEnabled(row, value)}
+            />
+          );
+        }
       }
     ]
   });
@@ -202,12 +197,11 @@ function handleEdit(row: Api.Ticket.Platform) {
     adapterType: row.adapterType,
     environment: row.environment,
     enabled: row.enabled,
-    supportsBatchRegister: row.supportsBatchRegister,
-    supportsBatchLogin: row.supportsBatchLogin,
     supportsSms: row.supportsSms,
     supportsEmail: row.supportsEmail,
     supportsPhoneIdentity: row.supportsPhoneIdentity,
     callbackUrl: row.callbackUrl,
+    orderSubmitUrl: row.orderSubmitUrl,
     callbackSecretMask: row.callbackSecretMask,
     registrationTemplate: row.registrationTemplate,
     loginStrategy: row.loginStrategy,
@@ -225,21 +219,48 @@ async function handleSubmit() {
   await getData();
 }
 
-async function handleDelete(ids: CommonType.IdType[]) {
-  const { error } = await fetchDeleteTicketPlatform(ids);
-  if (error) return;
-  window.$message?.success('平台已删除');
-  checkedRowKeys.value = checkedRowKeys.value.filter(key => !ids.includes(key));
-  await getData();
-}
-
-function handleBatchDelete() {
-  if (!checkedRowKeys.value.length) {
-    window.$message?.warning('请先选择要删除的平台');
+async function handleTogglePlatformEnabled(row: Api.Ticket.Platform, enabled: boolean) {
+  if (row.enabled === enabled) {
     return;
   }
-  void handleDelete(checkedRowKeys.value);
+
+  const actionText = enabled ? '启用' : '停用';
+  window.$dialog?.warning({
+    title: '状态确认',
+    content: `确定要${actionText}平台 ${row.platformName} 吗？`,
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      const rowKey = String(row.platformId);
+      statusLoadingMap[rowKey] = true;
+      const payload: Api.Ticket.PlatformOperateParams = {
+        platformId: row.platformId,
+        platformCode: row.platformCode,
+        platformName: row.platformName,
+        adapterType: row.adapterType,
+        environment: row.environment,
+        enabled,
+        supportsSms: row.supportsSms,
+        supportsEmail: row.supportsEmail,
+        supportsPhoneIdentity: row.supportsPhoneIdentity,
+        callbackUrl: row.callbackUrl,
+        orderSubmitUrl: row.orderSubmitUrl,
+        callbackSecretMask: row.callbackSecretMask,
+        registrationTemplate: row.registrationTemplate,
+        loginStrategy: row.loginStrategy,
+        remark: row.remark || ''
+      };
+      const { error } = await fetchUpdateTicketPlatform(payload);
+      statusLoadingMap[rowKey] = false;
+      if (error) {
+        return;
+      }
+      row.enabled = enabled;
+      window.$message?.success(`平台已${actionText}`);
+    }
+  });
 }
+
 </script>
 
 <template>
@@ -274,12 +295,10 @@ function handleBatchDelete() {
       <template #header-extra>
         <TableHeaderOperation
           v-model:columns="columnChecks"
-          :disabled-delete="checkedRowKeys.length === 0"
           :loading="loading"
           :show-add="hasAuth('ticket:platform:add')"
-          :show-delete="hasAuth('ticket:platform:remove')"
+          :show-delete="false"
           @add="openAdd"
-          @delete="handleBatchDelete"
           @refresh="getData"
         />
       </template>
@@ -316,8 +335,6 @@ function handleBatchDelete() {
           <NFormItemGi :span="24" label="能力开关">
             <NSpace>
               <NCheckbox v-model:checked="formModel.enabled">启用平台</NCheckbox>
-              <NCheckbox v-model:checked="formModel.supportsBatchRegister">批量注册</NCheckbox>
-              <NCheckbox v-model:checked="formModel.supportsBatchLogin">批量登录</NCheckbox>
               <NCheckbox v-model:checked="formModel.supportsSms">短信验证</NCheckbox>
               <NCheckbox v-model:checked="formModel.supportsEmail">邮箱验证</NCheckbox>
               <NCheckbox v-model:checked="formModel.supportsPhoneIdentity">号码身份</NCheckbox>
@@ -325,6 +342,9 @@ function handleBatchDelete() {
           </NFormItemGi>
           <NFormItemGi :span="24" label="回调地址">
             <NInput v-model:value="formModel.callbackUrl" placeholder="https://example.com/ticket/callback" />
+          </NFormItemGi>
+          <NFormItemGi :span="24" label="下单接口地址">
+            <NInput v-model:value="formModel.orderSubmitUrl" placeholder="https://example.com/api/order/submit" />
           </NFormItemGi>
           <NFormItemGi :span="24" label="回调密钥摘要">
             <NInput v-model:value="formModel.callbackSecretMask" placeholder="用于页面展示的摘要值" />

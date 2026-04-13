@@ -27,7 +27,7 @@ public class TicketRegistrationBatchDetail extends TenantEntity {
     private String executeStatus;
     private String resultMessage;
     private Long accountId;
-    private String accountNo;
+    private String email;
     private Date executedAt;
 
     @TableLogic

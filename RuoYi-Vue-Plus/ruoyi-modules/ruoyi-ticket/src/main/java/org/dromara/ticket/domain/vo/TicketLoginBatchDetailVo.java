@@ -22,10 +22,10 @@ public class TicketLoginBatchDetailVo implements Serializable {
     private Long platformId;
     private String executeStatus;
     private String resultMessage;
-    private String sessionToken;
-    private Date sessionExpireTime;
+    private String reqData;
     private Date executedAt;
-    private String accountNo;
+    private String email;
+    private String accountInfo;
     private String phoneNumber;
     private String platformName;
 }

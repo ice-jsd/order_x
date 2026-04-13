@@ -7,7 +7,8 @@ public class TicketRegisterResult {
 
     private Long phoneId;
     private boolean success;
-    private String accountNo;
-    private String displayName;
+    private String email;
+    private String accountInfo;
+    private String reqData;
     private String message;
 }

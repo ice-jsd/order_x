@@ -8,6 +8,7 @@ import org.dromara.common.mybatis.core.domain.BaseEntity;
 import org.dromara.ticket.domain.TicketSaleTask;
 
 import java.util.Date;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -17,12 +18,16 @@ public class TicketSaleTaskBo extends BaseEntity {
 
     private Long taskId;
     private Long platformId;
-    private Long eventId;
+    private String productId;
     private String taskName;
-    private String taskMode;
     private String taskStatus;
+    private String orderFlowType;
+    private String fulfillmentType;
+    private String paymentMode;
     private Date warmupTime;
     private Date scheduledTime;
-    private String ruleConfig;
+    private Integer purchaseQuantity;
+    private String taskOptions;
     private String remark;
+    private List<Long> accountIds;
 }

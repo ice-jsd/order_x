@@ -345,15 +345,6 @@ export const generatedRoutes: GeneratedRoute[] = [
         }
       },
       {
-        name: 'ticket_login-batch',
-        path: '/ticket/login-batch',
-        component: 'view.ticket_login-batch',
-        meta: {
-          title: 'ticket_login-batch',
-          i18nKey: 'route.ticket_login-batch'
-        }
-      },
-      {
         name: 'ticket_order-execution',
         path: '/ticket/order-execution',
         component: 'view.ticket_order-execution',
@@ -378,15 +369,6 @@ export const generatedRoutes: GeneratedRoute[] = [
         meta: {
           title: 'ticket_platform',
           i18nKey: 'route.ticket_platform'
-        }
-      },
-      {
-        name: 'ticket_registration-batch',
-        path: '/ticket/registration-batch',
-        component: 'view.ticket_registration-batch',
-        meta: {
-          title: 'ticket_registration-batch',
-          i18nKey: 'route.ticket_registration-batch'
         }
       },
       {

@@ -55,11 +55,9 @@ declare module "@elegant-router/types" {
     "ticket_account": "/ticket/account";
     "ticket_audit-log": "/ticket/audit-log";
     "ticket_event": "/ticket/event";
-    "ticket_login-batch": "/ticket/login-batch";
     "ticket_order-execution": "/ticket/order-execution";
     "ticket_phone": "/ticket/phone";
     "ticket_platform": "/ticket/platform";
-    "ticket_registration-batch": "/ticket/registration-batch";
     "ticket_sale-task": "/ticket/sale-task";
     "tool": "/tool";
     "tool_gen": "/tool/gen";
@@ -161,11 +159,9 @@ declare module "@elegant-router/types" {
     | "ticket_account"
     | "ticket_audit-log"
     | "ticket_event"
-    | "ticket_login-batch"
     | "ticket_order-execution"
     | "ticket_phone"
     | "ticket_platform"
-    | "ticket_registration-batch"
     | "ticket_sale-task"
     | "tool_gen"
   >;

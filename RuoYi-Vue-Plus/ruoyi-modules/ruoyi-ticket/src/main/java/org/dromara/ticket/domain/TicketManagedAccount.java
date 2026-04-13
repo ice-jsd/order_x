@@ -23,12 +23,11 @@ public class TicketManagedAccount extends TenantEntity {
 
     private Long platformId;
     private Long phoneId;
-    private String accountNo;
-    private String displayName;
+    private String email;
+    private String accountInfo;
+    private String reqData;
     private String accountStatus;
     private String loginStatus;
-    private String sessionToken;
-    private Date sessionExpireTime;
     private Date lastLoginTime;
     private String lastError;
 

@@ -22,14 +22,18 @@ public class TicketSaleTask extends TenantEntity {
     private Long taskId;
 
     private Long platformId;
-    private Long eventId;
+    private String productId;
     private String taskName;
-    private String taskMode;
     private String taskStatus;
+    private Long scheduleVersion;
+    private String orderFlowType;
+    private String fulfillmentType;
+    private String paymentMode;
     private Date warmupTime;
     private Date scheduledTime;
     private Date lastExecutedTime;
-    private String ruleConfig;
+    private Integer purchaseQuantity;
+    private String taskOptions;
     private String remark;
 
     @TableLogic

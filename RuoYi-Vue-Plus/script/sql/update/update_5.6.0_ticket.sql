@@ -10,13 +10,14 @@ CREATE TABLE IF NOT EXISTS `ticket_platform_config` (
   `adapter_type` varchar(32) DEFAULT 'mock' COMMENT '适配器类型',
   `environment` varchar(32) DEFAULT 'sandbox' COMMENT '环境',
   `enabled` tinyint(1) DEFAULT 1 COMMENT '是否启用',
-  `supports_batch_register` tinyint(1) DEFAULT 1 COMMENT '支持批量注册',
-  `supports_batch_login` tinyint(1) DEFAULT 1 COMMENT '支持批量登录',
+  `supports_batch_register` tinyint(1) DEFAULT 0 COMMENT '支持批量注册(已停用)',
+  `supports_batch_login` tinyint(1) DEFAULT 0 COMMENT '支持批量登录(已停用)',
   `supports_sms` tinyint(1) DEFAULT 0 COMMENT '支持短信',
-  `supports_email` tinyint(1) DEFAULT 1 COMMENT '支持邮箱',
-  `supports_phone_identity` tinyint(1) DEFAULT 1 COMMENT '支持号码身份',
-  `callback_url` varchar(500) DEFAULT NULL COMMENT '回调地址',
-  `callback_secret_mask` varchar(255) DEFAULT NULL COMMENT '回调密钥摘要',
+    `supports_email` tinyint(1) DEFAULT 1 COMMENT '支持邮箱',
+    `supports_phone_identity` tinyint(1) DEFAULT 1 COMMENT '支持号码身份',
+    `callback_url` varchar(500) DEFAULT NULL COMMENT '回调地址',
+    `order_submit_url` varchar(500) DEFAULT NULL COMMENT '下单接口地址',
+    `callback_secret_mask` varchar(255) DEFAULT NULL COMMENT '回调密钥摘要',
   `registration_template` text COMMENT '注册模板',
   `login_strategy` text COMMENT '登录策略',
   `remark` varchar(500) DEFAULT NULL COMMENT '备注',
@@ -77,12 +78,11 @@ CREATE TABLE IF NOT EXISTS `ticket_managed_account` (
   `tenant_id` varchar(20) DEFAULT '000000' COMMENT '租户编号',
   `platform_id` bigint(20) NOT NULL COMMENT '平台主键',
   `phone_id` bigint(20) DEFAULT NULL COMMENT '号码主键',
-  `account_no` varchar(128) NOT NULL COMMENT '账号编号',
-  `display_name` varchar(120) DEFAULT NULL COMMENT '展示名',
+  `email` varchar(255) NOT NULL COMMENT '账号邮箱',
+  `account_info` longtext COMMENT '账号信息(JSON)',
+  `req_data` longtext COMMENT '请求上下文(JSON)',
   `account_status` varchar(32) DEFAULT 'registered' COMMENT '账号状态',
   `login_status` varchar(32) DEFAULT 'offline' COMMENT '登录状态',
-  `session_token` varchar(1024) DEFAULT NULL COMMENT '会话令牌',
-  `session_expire_time` datetime DEFAULT NULL COMMENT '会话过期时间',
   `last_login_time` datetime DEFAULT NULL COMMENT '最近登录时间',
   `last_error` varchar(500) DEFAULT NULL COMMENT '最近错误',
   `create_dept` bigint(20) DEFAULT NULL COMMENT '创建部门',
@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS `ticket_managed_account` (
   `update_time` datetime DEFAULT NULL COMMENT '更新时间',
   `del_flag` bigint(20) DEFAULT 0 COMMENT '删除标志',
   PRIMARY KEY (`account_id`),
+  UNIQUE KEY `uk_ticket_account_platform_email` (`platform_id`, `email`, `del_flag`),
   KEY `idx_ticket_account_platform` (`platform_id`),
   KEY `idx_ticket_account_phone` (`phone_id`),
   KEY `idx_ticket_account_login_status` (`login_status`)
@@ -129,7 +130,7 @@ CREATE TABLE IF NOT EXISTS `ticket_registration_batch_detail` (
   `execute_status` varchar(32) DEFAULT 'processing' COMMENT '执行状态',
   `result_message` varchar(500) DEFAULT NULL COMMENT '返回信息',
   `account_id` bigint(20) DEFAULT NULL COMMENT '账号主键',
-  `account_no` varchar(128) DEFAULT NULL COMMENT '账号编号',
+  `email` varchar(255) DEFAULT NULL COMMENT '账号邮箱',
   `executed_at` datetime DEFAULT NULL COMMENT '执行时间',
   `create_dept` bigint(20) DEFAULT NULL COMMENT '创建部门',
   `create_by` bigint(20) DEFAULT NULL COMMENT '创建者',
@@ -190,14 +191,13 @@ CREATE TABLE IF NOT EXISTS `ticket_sale_task` (
   `task_id` bigint(20) NOT NULL COMMENT '任务主键',
   `tenant_id` varchar(20) DEFAULT '000000' COMMENT '租户编号',
   `platform_id` bigint(20) NOT NULL COMMENT '平台主键',
-  `event_id` bigint(20) NOT NULL COMMENT '活动主键',
+  `product_id` varchar(128) NOT NULL COMMENT '商品ID',
   `task_name` varchar(150) NOT NULL COMMENT '任务名称',
-  `task_mode` varchar(32) DEFAULT 'manual_confirm' COMMENT '任务模式',
   `task_status` varchar(32) DEFAULT 'draft' COMMENT '任务状态',
   `warmup_time` datetime DEFAULT NULL COMMENT '预热时间',
   `scheduled_time` datetime DEFAULT NULL COMMENT '计划执行时间',
+  `purchase_quantity` int DEFAULT 1 COMMENT '单账号购买数量',
   `last_executed_time` datetime DEFAULT NULL COMMENT '最近执行时间',
-  `rule_config` longtext COMMENT '规则配置',
   `remark` varchar(500) DEFAULT NULL COMMENT '备注',
   `create_dept` bigint(20) DEFAULT NULL COMMENT '创建部门',
   `create_by` bigint(20) DEFAULT NULL COMMENT '创建者',
@@ -207,9 +207,26 @@ CREATE TABLE IF NOT EXISTS `ticket_sale_task` (
   `del_flag` bigint(20) DEFAULT 0 COMMENT '删除标志',
   PRIMARY KEY (`task_id`),
   KEY `idx_ticket_sale_task_platform` (`platform_id`),
-  KEY `idx_ticket_sale_task_event` (`event_id`),
+  KEY `idx_ticket_sale_task_product` (`product_id`),
   KEY `idx_ticket_sale_task_status` (`task_status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售任务表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商品抢购任务表';
+
+CREATE TABLE IF NOT EXISTS `ticket_sale_task_account` (
+  `binding_id` bigint(20) NOT NULL COMMENT '绑定主键',
+  `tenant_id` varchar(20) DEFAULT '000000' COMMENT '租户编号',
+  `task_id` bigint(20) NOT NULL COMMENT '任务主键',
+  `account_id` bigint(20) NOT NULL COMMENT '账号主键',
+  `create_dept` bigint(20) DEFAULT NULL COMMENT '创建部门',
+  `create_by` bigint(20) DEFAULT NULL COMMENT '创建者',
+  `create_time` datetime DEFAULT NULL COMMENT '创建时间',
+  `update_by` bigint(20) DEFAULT NULL COMMENT '更新者',
+  `update_time` datetime DEFAULT NULL COMMENT '更新时间',
+  `del_flag` bigint(20) DEFAULT 0 COMMENT '删除标志',
+  PRIMARY KEY (`binding_id`),
+  UNIQUE KEY `uk_ticket_sale_task_account` (`task_id`, `account_id`, `del_flag`),
+  KEY `idx_ticket_sale_task_account_task` (`task_id`),
+  KEY `idx_ticket_sale_task_account_account` (`account_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='抢购任务账号绑定表';
 
 CREATE TABLE IF NOT EXISTS `ticket_order_execution` (
   `execution_id` bigint(20) NOT NULL COMMENT '执行主键',
@@ -217,9 +234,12 @@ CREATE TABLE IF NOT EXISTS `ticket_order_execution` (
   `task_id` bigint(20) NOT NULL COMMENT '任务主键',
   `platform_id` bigint(20) NOT NULL COMMENT '平台主键',
   `account_id` bigint(20) DEFAULT NULL COMMENT '账号主键',
+  `product_id` varchar(128) DEFAULT NULL COMMENT '商品ID',
+  `purchase_quantity` int DEFAULT NULL COMMENT '购买数量',
   `order_no` varchar(128) DEFAULT NULL COMMENT '订单号',
   `execution_status` varchar(32) DEFAULT 'blocked' COMMENT '执行状态',
   `result_message` varchar(500) DEFAULT NULL COMMENT '结果信息',
+  `raw_result` longtext COMMENT '原始响应摘要',
   `executed_at` datetime DEFAULT NULL COMMENT '执行时间',
   `create_dept` bigint(20) DEFAULT NULL COMMENT '创建部门',
   `create_by` bigint(20) DEFAULT NULL COMMENT '创建者',
@@ -281,27 +301,17 @@ FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20003);
 
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
-SELECT 20004, '注册批次', 20000, 4, 'registration-batch', 'ticket/registration-batch/index', '', 1, 0, 'C', '0', '0', 'ticket:registrationBatch:list', 'form', 103, 1, SYSDATE(), NULL, NULL, '注册批次菜单'
-FROM dual
-WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20004);
-
-INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
-SELECT 20005, '登录批次', 20000, 5, 'login-batch', 'ticket/login-batch/index', '', 1, 0, 'C', '0', '0', 'ticket:loginBatch:list', 'log', 103, 1, SYSDATE(), NULL, NULL, '登录批次菜单'
-FROM dual
-WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20005);
-
-INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
 SELECT 20006, '活动配置', 20000, 6, 'event', 'ticket/event/index', '', 1, 0, 'C', '0', '0', 'ticket:event:list', 'date', 103, 1, SYSDATE(), NULL, NULL, '活动配置菜单'
 FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20006);
 
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
-SELECT 20007, '销售任务', 20000, 7, 'sale-task', 'ticket/sale-task/index', '', 1, 0, 'C', '0', '0', 'ticket:saleTask:list', 'job', 103, 1, SYSDATE(), NULL, NULL, '销售任务菜单'
+SELECT 20007, '商品抢购任务', 20000, 7, 'sale-task', 'ticket/sale-task/index', '', 1, 0, 'C', '0', '0', 'ticket:saleTask:list', 'job', 103, 1, SYSDATE(), NULL, NULL, '商品抢购任务菜单'
 FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20007);
 
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
-SELECT 20008, '订单执行', 20000, 8, 'order-execution', 'ticket/order-execution/index', '', 1, 0, 'C', '0', '0', 'ticket:orderExecution:list', 'list', 103, 1, SYSDATE(), NULL, NULL, '订单执行菜单'
+SELECT 20008, '下单执行', 20000, 8, 'order-execution', 'ticket/order-execution/index', '', 1, 0, 'C', '0', '0', 'ticket:orderExecution:list', 'list', 103, 1, SYSDATE(), NULL, NULL, '下单执行菜单'
 FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20008);
 
@@ -326,16 +336,6 @@ FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20103);
 
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
-SELECT 20104, '平台删除', 20001, 4, '', '', '', 1, 0, 'F', '0', '0', 'ticket:platform:remove', '#', 103, 1, SYSDATE(), NULL, NULL, ''
-FROM dual
-WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20104);
-
-INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
-SELECT 20105, '平台批量注册', 20001, 5, '', '', '', 1, 0, 'F', '0', '0', 'ticket:platform:register', '#', 103, 1, SYSDATE(), NULL, NULL, ''
-FROM dual
-WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20105);
-
-INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
 SELECT 20201, '号码导入', 20002, 1, '', '', '', 1, 0, 'F', '0', '0', 'ticket:phone:import', '#', 103, 1, SYSDATE(), NULL, NULL, ''
 FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20201);
@@ -349,11 +349,6 @@ INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`
 SELECT 20203, '关系查询', 20002, 3, '', '', '', 1, 0, 'F', '0', '0', 'ticket:relation:list', '#', 103, 1, SYSDATE(), NULL, NULL, ''
 FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20203);
-
-INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
-SELECT 20301, '账号批量登录', 20003, 1, '', '', '', 1, 0, 'F', '0', '0', 'ticket:account:login', '#', 103, 1, SYSDATE(), NULL, NULL, ''
-FROM dual
-WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20301);
 
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
 SELECT 20601, '活动查询', 20006, 1, '', '', '', 1, 0, 'F', '0', '0', 'ticket:event:query', '#', 103, 1, SYSDATE(), NULL, NULL, ''
@@ -399,3 +394,8 @@ INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`
 SELECT 20705, '任务执行', 20007, 5, '', '', '', 1, 0, 'F', '0', '0', 'ticket:saleTask:execute', '#', 103, 1, SYSDATE(), NULL, NULL, ''
 FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20705);
+
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
+SELECT 20802, '执行状态更新', 20008, 2, '', '', '', 1, 0, 'F', '0', '0', 'ticket:orderExecution:edit', '#', 103, 1, SYSDATE(), NULL, NULL, ''
+FROM dual
+WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20802);

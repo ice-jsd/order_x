@@ -16,8 +16,7 @@ public class TicketManagedAccountBo extends BaseEntity {
     private Long accountId;
     private Long platformId;
     private Long phoneId;
-    private String accountNo;
-    private String displayName;
+    private String email;
     private String accountStatus;
     private String loginStatus;
 }

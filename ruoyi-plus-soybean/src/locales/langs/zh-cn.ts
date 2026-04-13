@@ -1278,11 +1278,9 @@ local.route.ticket = '票务运营';
 local.route.ticket_platform = '平台接入';
 local.route.ticket_phone = '号码池';
 local.route.ticket_account = '账号池';
-local.route['ticket_registration-batch'] = '注册批次';
-local.route['ticket_login-batch'] = '登录批次';
 local.route.ticket_event = '活动配置';
-local.route['ticket_sale-task'] = '销售任务';
-local.route['ticket_order-execution'] = '订单执行';
+local.route['ticket_sale-task'] = '商品抢购任务';
+local.route['ticket_order-execution'] = '下单执行';
 local.route['ticket_audit-log'] = '审计中心';
 
 export default local;

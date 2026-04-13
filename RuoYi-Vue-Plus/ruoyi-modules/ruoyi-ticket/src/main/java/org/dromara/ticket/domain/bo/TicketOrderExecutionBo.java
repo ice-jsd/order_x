@@ -17,6 +17,8 @@ public class TicketOrderExecutionBo extends BaseEntity {
     private Long taskId;
     private Long platformId;
     private Long accountId;
+    private String productId;
     private String orderNo;
     private String executionStatus;
+    private String paymentStatus;
 }

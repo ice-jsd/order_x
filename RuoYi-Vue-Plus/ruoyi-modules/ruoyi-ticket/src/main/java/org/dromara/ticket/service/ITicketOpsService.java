@@ -74,7 +74,13 @@ public interface ITicketOpsService {
 
     TableDataInfo<TicketOrderExecutionVo> selectOrderExecutionPage(TicketOrderExecutionBo bo, PageQuery pageQuery);
 
+    int markOrderExecutionPaid(Long executionId, TicketOrderExecutionPaymentBo bo);
+
     TableDataInfo<TicketAuditEventVo> selectAuditPage(TicketAuditEventBo bo, PageQuery pageQuery);
 
     R<String> handleCallback(String platformCode, Map<String, Object> payload);
+
+    R<Void> reportExternalLoginSuccess(TicketExternalLoginReportBo bo);
+
+    R<TicketExternalOfflineAccountVo> fetchNextOfflineAccount(String platformCode);
 }

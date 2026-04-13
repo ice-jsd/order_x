@@ -8,8 +8,8 @@ import org.dromara.ticket.domain.TicketPlatformConfig;
 import org.dromara.ticket.domain.TicketSaleTask;
 import org.springframework.stereotype.Component;
 
-import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -27,8 +27,17 @@ public class LivePocketAdapter implements TicketPlatformAdapter {
             TicketRegisterResult result = new TicketRegisterResult();
             result.setPhoneId(phone.getPhoneId());
             result.setSuccess(true);
-            result.setAccountNo(platform.getPlatformCode() + "-" + phone.getPhoneNumber());
-            result.setDisplayName(phone.getSupplier() + "-" + RandomUtil.randomStringUpper(4));
+            String email = phone.getPhoneNumber() + "@" + platform.getPlatformCode() + ".test";
+            Map<String, Object> accountInfo = new LinkedHashMap<>();
+            accountInfo.put("nickname", phone.getSupplier() + "-" + RandomUtil.randomStringUpper(4));
+            accountInfo.put("source", "live-pocket-register");
+            Map<String, Object> reqData = new LinkedHashMap<>();
+            reqData.put("platformCode", platform.getPlatformCode());
+            reqData.put("phoneNumber", phone.getPhoneNumber());
+            reqData.put("channel", "email");
+            result.setEmail(email);
+            result.setAccountInfo(JSONUtil.toJsonStr(accountInfo));
+            result.setReqData(JSONUtil.toJsonStr(reqData));
             result.setMessage("mock register ok");
             return result;
         }).toList();
@@ -36,13 +45,20 @@ public class LivePocketAdapter implements TicketPlatformAdapter {
 
     @Override
     public List<TicketLoginResult> batchLogin(TicketPlatformConfig platform, List<TicketManagedAccount> accounts) {
-        Date expireTime = new Date(System.currentTimeMillis() + 30L * 60L * 1000L);
         return accounts.stream().map(account -> {
             TicketLoginResult result = new TicketLoginResult();
             result.setAccountId(account.getAccountId());
             result.setSuccess(true);
-            result.setSessionToken(platform.getPlatformCode() + "-session-" + RandomUtil.randomString(12));
-            result.setSessionExpireTime(expireTime);
+            Map<String, Object> accountInfo = new LinkedHashMap<>();
+            accountInfo.put("email", account.getEmail());
+            accountInfo.put("profileStatus", "active");
+            accountInfo.put("source", "live-pocket-login");
+            Map<String, Object> reqData = new LinkedHashMap<>();
+            reqData.put("sessionId", platform.getPlatformCode() + "-session-" + RandomUtil.randomString(12));
+            reqData.put("loginAt", System.currentTimeMillis());
+            reqData.put("ip", "127.0.0.1");
+            result.setAccountInfo(JSONUtil.toJsonStr(accountInfo));
+            result.setReqData(JSONUtil.toJsonStr(reqData));
             result.setMessage("mock login ok");
             return result;
         }).toList();
@@ -68,20 +84,48 @@ public class LivePocketAdapter implements TicketPlatformAdapter {
     }
 
     @Override
-    public Map<String, Object> prepareOrder(TicketPlatformConfig platform, TicketSaleTask saleTask) {
-        Map<String, Object> prepared = new HashMap<>();
-        prepared.put("platformCode", platform.getPlatformCode());
-        prepared.put("taskId", saleTask.getTaskId());
-        prepared.put("prepared", true);
-        return prepared;
+    public TicketOrderFlowDefinition buildOrderFlow(TicketPlatformConfig platform, TicketSaleTask saleTask, TicketManagedAccount account) {
+        TicketOrderFlowDefinition definition = TicketOrderFlowSupport.buildDefaultFlow(platform, saleTask, account);
+        definition.getSteps().forEach(step -> step.getOptions().put("adapter", adapterType()));
+        return definition;
     }
 
     @Override
-    public TicketOrderResult submitOrder(TicketPlatformConfig platform, TicketSaleTask saleTask, TicketManagedAccount account) {
+    public TicketOrderResult executeStep(TicketPlatformConfig platform, TicketOrderFlowContext context, TicketOrderFlowStep step) {
         TicketOrderResult result = new TicketOrderResult();
         result.setSuccess(true);
-        result.setOrderNo(platform.getPlatformCode() + "-order-" + RandomUtil.randomNumbers(8));
-        result.setMessage("mock order executed");
+        result.setCurrentStep(step.getCurrentStep());
+        if ("SUBMIT_ORDER".equals(step.getStepType())) {
+            result.setOrderNo(platform.getPlatformCode() + "-order-" + RandomUtil.randomNumbers(8));
+            result.setExecutionStatus("submitted");
+            result.setPaymentStatus(TicketOrderFlowSupport.initialPaymentStatus(context.getSaleTask().getPaymentMode()));
+            result.setMessage("live pocket mock submit ok");
+        } else if ("CREATE_ONLINE_PAYMENT".equals(step.getStepType())) {
+            result.setExecutionStatus("pending_payment");
+            result.setPaymentStatus("pending_online");
+            result.setMessage("live pocket mock payment created");
+        } else if ("CONFIRM_PENDING_PAYMENT".equals(step.getStepType())) {
+            result.setExecutionStatus("pending_payment");
+            result.setPaymentStatus("manual_pending");
+            result.setMessage("live pocket pending payment");
+        } else {
+            result.setExecutionStatus("running");
+            result.setPaymentStatus(context.getPaymentStatus());
+            result.setMessage("live pocket mock step ok: " + step.getStepType());
+        }
+        result.setStepTrace(JSONUtil.toJsonStr(step.getOptions()));
+        return result;
+    }
+
+    @Override
+    public TicketOrderResult finalizeOrder(TicketPlatformConfig platform, TicketOrderFlowContext context) {
+        TicketOrderResult result = new TicketOrderResult();
+        result.setSuccess(true);
+        result.setOrderNo(context.getOrderNo());
+        result.setCurrentStep("completed");
+        result.setExecutionStatus("online".equals(context.getSaleTask().getPaymentMode()) ? "pending_payment" : "submitted");
+        result.setPaymentStatus(context.getPaymentStatus());
+        result.setMessage("live pocket order finalized");
         return result;
     }
 

@@ -1,5 +1,5 @@
 import { h } from 'vue';
-import { NEllipsis, NTag } from 'naive-ui';
+import { NEllipsis, NPopover, NTag } from 'naive-ui';
 
 export const yesNoOptions = [
   { label: '启用', value: true },
@@ -69,16 +69,65 @@ export const taskModeOptions = [
 ];
 
 export const taskStatusOptions = [
-  { label: '草稿', value: 'draft' },
+  { label: '待执行', value: 'draft' },
   { label: '执行中', value: 'executing' },
-  { label: '已完成', value: 'completed' },
+  { label: '待支付', value: 'pending_payment' },
+  { label: '已支付', value: 'paid' },
+  { label: '部分完成', value: 'partial' },
+  { label: '失败', value: 'failed' },
   { label: '阻塞', value: 'blocked' }
 ];
 
 export const executionStatusOptions = [
-  { label: '成功', value: 'success' },
+  { label: '排队中', value: 'queued' },
+  { label: '执行中', value: 'running' },
+  { label: '已提交', value: 'submitted' },
+  { label: '待支付', value: 'pending_payment' },
+  { label: '已支付', value: 'paid' },
   { label: '阻塞', value: 'blocked' },
+  { label: '失败', value: 'failed' },
+  { label: '超时', value: 'timeout' }
+];
+
+export const orderFlowTypeOptions = [
+  { label: '直接下单', value: 'direct_order' },
+  { label: '加购结算', value: 'cart_checkout' }
+];
+
+export const fulfillmentTypeOptions = [
+  { label: '快递配送', value: 'shipping' },
+  { label: '门店自提', value: 'pickup_store' }
+];
+
+export const paymentModeOptions = [
+  { label: '线上支付', value: 'online' },
+  { label: '门店付款', value: 'cod_store' },
+  { label: '人工支付', value: 'pending_manual' }
+];
+
+export const paymentStatusOptions = [
+  { label: '待线上支付', value: 'pending_online' },
+  { label: '待门店付款', value: 'offline_pending' },
+  { label: '待人工处理', value: 'manual_pending' },
+  { label: '已支付', value: 'paid' }
+];
+
+export const orderStepStatusOptions = [
+  { label: '排队中', value: 'queued' },
+  { label: '执行中', value: 'running' },
+  { label: '成功', value: 'success' },
   { label: '失败', value: 'failed' }
+];
+
+export const orderCurrentStepOptions = [
+  { label: '购物车处理', value: 'carting' },
+  { label: '结算准备', value: 'checking_out' },
+  { label: '履约选择', value: 'selecting_fulfillment' },
+  { label: '支付方式选择', value: 'selecting_payment' },
+  { label: '创建订单', value: 'creating_order' },
+  { label: '等待支付', value: 'awaiting_payment' },
+  { label: '已完成', value: 'completed' },
+  { label: '排队中', value: 'queued' }
 ];
 
 export const auditStatusOptions = [
@@ -108,16 +157,37 @@ const colorMap: Record<string, string> = {
   completed: 'success',
   partial: 'warning',
   blocked: 'error',
+  pending_payment: 'warning',
+  paid: 'success',
   ready: 'success',
   closed: 'default',
   success: 'success',
   failed: 'error',
+  timeout: 'warning',
   warn: 'warning',
   manual_confirm: 'warning',
   auto_submit: 'info',
   processing: 'info',
   skipped: 'warning',
-  queued: 'default'
+  queued: 'default',
+  running: 'info',
+  submitted: 'success',
+  direct_order: 'info',
+  cart_checkout: 'warning',
+  shipping: 'success',
+  pickup_store: 'warning',
+  online: 'info',
+  cod_store: 'warning',
+  pending_manual: 'default',
+  pending_online: 'warning',
+  offline_pending: 'warning',
+  manual_pending: 'default',
+  carting: 'info',
+  checking_out: 'info',
+  selecting_fulfillment: 'warning',
+  selecting_payment: 'warning',
+  creating_order: 'info',
+  awaiting_payment: 'warning'
 };
 
 const labelMap: Record<string, string> = Object.fromEntries(
@@ -133,6 +203,12 @@ const labelMap: Record<string, string> = Object.fromEntries(
     ...taskModeOptions,
     ...taskStatusOptions,
     ...executionStatusOptions,
+    ...orderFlowTypeOptions,
+    ...fulfillmentTypeOptions,
+    ...paymentModeOptions,
+    ...paymentStatusOptions,
+    ...orderStepStatusOptions,
+    ...orderCurrentStepOptions,
     ...auditStatusOptions
   ].map(item => [String(item.value), item.label])
 );
@@ -164,6 +240,96 @@ export function renderTicketEllipsis(value?: string | null) {
     { tooltip: true, style: { maxWidth: '280px' } },
     {
       default: () => value || '-'
+    }
+  );
+}
+
+export function renderTicketEmail(value?: string | null) {
+  const isLegacyEmail = !!value && value.includes('@invalid.local');
+
+  return h(
+    'div',
+    {
+      class: isLegacyEmail ? 'text-12px text-text-3' : 'text-12px text-text-2'
+    },
+    [
+      h(
+        NEllipsis,
+        { tooltip: true, style: { maxWidth: isLegacyEmail ? '220px' : '240px' } },
+        {
+          default: () => value || '-'
+        }
+      )
+    ]
+  );
+}
+
+export function renderTicketJsonSummary(
+  value?: string | null,
+  preferredKeys: string[] = []
+) {
+  if (!value) {
+    return '-';
+  }
+
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    const raw = JSON.parse(value);
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      parsed = raw as Record<string, unknown>;
+    }
+  } catch {
+    parsed = null;
+  }
+
+  if (!parsed) {
+    return renderTicketEllipsis(value);
+  }
+
+  const keys = Object.keys(parsed);
+  const summaryKeys = preferredKeys.filter(key => key in parsed).slice(0, 2);
+  const fallbackKeys = keys.filter(key => !summaryKeys.includes(key)).slice(0, Math.max(0, 2 - summaryKeys.length));
+  const displayKeys = [...summaryKeys, ...fallbackKeys];
+  const previewItems = displayKeys.map(key => `${key}: ${String(parsed?.[key] ?? '-')}`);
+
+  const prettyJson = JSON.stringify(parsed, null, 2);
+  const summaryText = previewItems.length ? previewItems.join(' · ') : '查看详情';
+
+  return h(
+    NPopover,
+    { trigger: 'hover', placement: 'left', width: 420 },
+    {
+      trigger: () =>
+        h(
+          'div',
+          {
+            class: 'max-w-220px cursor-help text-left'
+          },
+          [
+            h(
+              'div',
+              {
+                class: 'truncate text-12px leading-18px text-text-2'
+              },
+              summaryText
+            ),
+            h(
+              'div',
+              {
+                class: 'text-12px leading-18px text-text-3'
+              },
+              `共 ${keys.length} 个字段`
+            )
+          ]
+        ),
+      default: () =>
+        h(
+          'pre',
+          {
+            class: 'max-w-380px overflow-auto whitespace-pre-wrap break-all rounded-8px bg-#f6f8fb p-12px text-12px leading-18px text-#334155'
+          },
+          prettyJson
+        )
     }
   );
 }

@@ -36,7 +36,7 @@ public class TicketSaleTaskController extends BaseController {
     }
 
     @SaCheckPermission("ticket:saleTask:add")
-    @Log(title = "销售任务", businessType = BusinessType.INSERT)
+    @Log(title = "商品抢购任务", businessType = BusinessType.INSERT)
     @RepeatSubmit
     @PostMapping
     public R<Void> add(@RequestBody TicketSaleTaskBo bo) {
@@ -44,7 +44,7 @@ public class TicketSaleTaskController extends BaseController {
     }
 
     @SaCheckPermission("ticket:saleTask:edit")
-    @Log(title = "销售任务", businessType = BusinessType.UPDATE)
+    @Log(title = "商品抢购任务", businessType = BusinessType.UPDATE)
     @RepeatSubmit
     @PutMapping
     public R<Void> edit(@RequestBody TicketSaleTaskBo bo) {
@@ -52,14 +52,14 @@ public class TicketSaleTaskController extends BaseController {
     }
 
     @SaCheckPermission("ticket:saleTask:remove")
-    @Log(title = "销售任务", businessType = BusinessType.DELETE)
+    @Log(title = "商品抢购任务", businessType = BusinessType.DELETE)
     @DeleteMapping("/{taskIds}")
     public R<Void> remove(@PathVariable Long[] taskIds) {
         return toAjax(ticketOpsService.removeSaleTasks(taskIds));
     }
 
     @SaCheckPermission("ticket:saleTask:execute")
-    @Log(title = "销售任务", businessType = BusinessType.OTHER)
+    @Log(title = "商品抢购任务", businessType = BusinessType.OTHER)
     @RepeatSubmit
     @PostMapping("/{taskId}/execute")
     public R<Long> execute(@PathVariable Long taskId) {

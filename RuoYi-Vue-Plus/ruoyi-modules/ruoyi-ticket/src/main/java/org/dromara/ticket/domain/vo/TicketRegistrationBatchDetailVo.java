@@ -23,7 +23,9 @@ public class TicketRegistrationBatchDetailVo implements Serializable {
     private String executeStatus;
     private String resultMessage;
     private Long accountId;
-    private String accountNo;
+    private String email;
+    private String accountInfo;
+    private String reqData;
     private Date executedAt;
     private String phoneNumber;
     private String platformName;
