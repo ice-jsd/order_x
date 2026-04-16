@@ -133,6 +133,21 @@ declare namespace Api {
       loginStatus: string;
     } & Api.Common.CommonSearchParams>;
 
+    type AccountOperateParams = CommonType.RecordNullable<{
+      platformId: CommonType.IdType;
+      phoneId: CommonType.IdType;
+      email: string;
+      accountInfo: string;
+      reqData: string;
+    }>;
+
+    type AccountBindablePhoneSearchParams = CommonType.RecordNullable<{
+      platformId: CommonType.IdType;
+      phoneNumber: string;
+      countryCode: string;
+      supplier: string;
+    } & Api.Common.CommonSearchParams>;
+
     type AccountList = Api.Common.PaginatingQueryRecord<Account>;
 
     type Event = Common.CommonTenantRecord<{

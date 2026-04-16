@@ -1,7 +1,8 @@
 <script setup lang="tsx">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
+import { useAuth } from '@/hooks/business/auth';
 import { defaultTransform, useNaivePaginatedTable } from '@/hooks/common/table';
-import { fetchGetTicketAccountList, fetchGetTicketPlatformList } from '@/service/api/ticket';
+import { fetchCreateTicketAccount, fetchGetTicketAccountList, fetchGetTicketBindablePhoneList, fetchGetTicketPlatformList } from '@/service/api/ticket';
 import { useAppStore } from '@/store/modules/app';
 import {
   accountStatusOptions,
@@ -17,6 +18,20 @@ defineOptions({
 });
 
 const appStore = useAppStore();
+const { hasAuth } = useAuth();
+
+interface AccountFormModel {
+  platformId: CommonType.IdType | null;
+  phoneId: CommonType.IdType | null;
+  email: string;
+  accountInfo: string;
+  reqData: string;
+}
+
+interface PhoneOption {
+  label: string;
+  value: CommonType.IdType;
+}
 
 function createSearchParams(): Api.Ticket.AccountSearchParams {
   return {
@@ -32,9 +47,25 @@ function createSearchParams(): Api.Ticket.AccountSearchParams {
   };
 }
 
+function createFormModel(): AccountFormModel {
+  return {
+    platformId: null,
+    phoneId: null,
+    email: '',
+    accountInfo: '',
+    reqData: ''
+  };
+}
+
 const searchParams = ref<Api.Ticket.AccountSearchParams>(createSearchParams());
 const checkedRowKeys = ref<CommonType.IdType[]>([]);
 const platformOptions = ref<{ label: string; value: CommonType.IdType }[]>([]);
+const modalVisible = ref(false);
+const saving = ref(false);
+const phoneOptionsLoading = ref(false);
+const bindablePhoneOptions = ref<PhoneOption[]>([]);
+const formModel = ref<AccountFormModel>(createFormModel());
+const phoneSearchKeyword = ref('');
 
 const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagination, scrollX } =
   useNaivePaginatedTable({
@@ -107,11 +138,120 @@ async function loadPlatformOptions() {
   platformOptions.value = (list.rows || []).map(item => ({ label: item.platformName, value: item.platformId }));
 }
 
+function buildPhoneOptionLabel(phone: Api.Ticket.Phone) {
+  return `${phone.phoneNumber} · ${phone.countryCode || '-'} · ${phone.supplier || '-'}`;
+}
+
+async function loadBindablePhoneOptions(keyword = '') {
+  if (!formModel.value.platformId) {
+    bindablePhoneOptions.value = [];
+    return;
+  }
+
+  phoneOptionsLoading.value = true;
+  const { data: list, error } = await fetchGetTicketBindablePhoneList({
+    platformId: formModel.value.platformId,
+    phoneNumber: keyword || null,
+    pageNum: 1,
+    pageSize: 20,
+    params: {}
+  });
+  phoneOptionsLoading.value = false;
+  if (error) {
+    return;
+  }
+
+  bindablePhoneOptions.value = (list.rows || []).map(item => ({
+    label: buildPhoneOptionLabel(item),
+    value: item.phoneId
+  }));
+}
+
+function openAdd() {
+  formModel.value = createFormModel();
+  phoneSearchKeyword.value = '';
+  bindablePhoneOptions.value = [];
+  modalVisible.value = true;
+}
+
+function handlePlatformChange() {
+  formModel.value.phoneId = null;
+  bindablePhoneOptions.value = [];
+  phoneSearchKeyword.value = '';
+  void loadBindablePhoneOptions();
+}
+
+function handlePhoneSearch(value: string) {
+  phoneSearchKeyword.value = value;
+  void loadBindablePhoneOptions(value);
+}
+
+function validateJsonText(label: string, value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return true;
+  }
+
+  try {
+    JSON.parse(trimmed);
+    return true;
+  } catch {
+    window.$message?.warning(`${label} 不是合法的 JSON`);
+    return false;
+  }
+}
+
+async function handleSubmit() {
+  if (!formModel.value.platformId) {
+    window.$message?.warning('请选择目标平台');
+    return;
+  }
+  if (!formModel.value.phoneId) {
+    window.$message?.warning('请选择来源号码');
+    return;
+  }
+  if (!formModel.value.email.trim()) {
+    window.$message?.warning('请输入邮箱');
+    return;
+  }
+  if (!validateJsonText('账号信息', formModel.value.accountInfo) || !validateJsonText('请求上下文', formModel.value.reqData)) {
+    return;
+  }
+
+  saving.value = true;
+  const { error } = await fetchCreateTicketAccount({
+    platformId: formModel.value.platformId,
+    phoneId: formModel.value.phoneId,
+    email: formModel.value.email.trim(),
+    accountInfo: formModel.value.accountInfo.trim(),
+    reqData: formModel.value.reqData.trim()
+  });
+  saving.value = false;
+  if (error) {
+    return;
+  }
+
+  window.$message?.success('账号已创建');
+  modalVisible.value = false;
+  await getData();
+}
+
 function resetSearch() {
   searchParams.value = createSearchParams();
   checkedRowKeys.value = [];
   void getDataByPage();
 }
+
+watch(
+  () => modalVisible.value,
+  visible => {
+    if (!visible) {
+      formModel.value = createFormModel();
+      bindablePhoneOptions.value = [];
+      phoneSearchKeyword.value = '';
+    }
+  }
+);
 
 onMounted(() => {
   void getData();
@@ -176,8 +316,9 @@ onMounted(() => {
         <TableHeaderOperation
           v-model:columns="columnChecks"
           :loading="loading"
-          :show-add="false"
+          :show-add="hasAuth('ticket:account:add')"
           :show-delete="false"
+          @add="openAdd"
           @refresh="getData"
         />
       </template>
@@ -195,5 +336,64 @@ onMounted(() => {
         class="sm:h-full"
       />
     </NCard>
+
+    <NModal v-model:show="modalVisible" preset="card" title="新增账号" class="w-720px">
+      <NAlert type="info" :show-icon="false" class="mb-16px">
+        新增后默认状态为“已注册、离线”，后续可通过外部登录上报接口更新为已登录。
+      </NAlert>
+      <NForm label-placement="top" :model="formModel">
+        <NGrid :cols="24" :x-gap="16">
+          <NFormItemGi :span="12" label="目标平台">
+            <NSelect
+              v-model:value="formModel.platformId"
+              filterable
+              clearable
+              :options="platformOptions"
+              placeholder="请选择平台"
+              @update:value="handlePlatformChange"
+            />
+          </NFormItemGi>
+          <NFormItemGi :span="12" label="来源号码">
+            <NSelect
+              v-model:value="formModel.phoneId"
+              filterable
+              remote
+              clearable
+              :loading="phoneOptionsLoading"
+              :disabled="!formModel.platformId"
+              :options="bindablePhoneOptions"
+              placeholder="请先选择平台，再搜索号码"
+              @focus="loadBindablePhoneOptions(phoneSearchKeyword)"
+              @search="handlePhoneSearch"
+            />
+          </NFormItemGi>
+          <NFormItemGi :span="24" label="邮箱">
+            <NInput v-model:value="formModel.email" placeholder="请输入邮箱" />
+          </NFormItemGi>
+          <NFormItemGi :span="24" label="账号信息">
+            <NInput
+              v-model:value="formModel.accountInfo"
+              type="textarea"
+              :rows="4"
+              placeholder='可选，填写 JSON，例如 {"nickname":"demo-account"}'
+            />
+          </NFormItemGi>
+          <NFormItemGi :span="24" label="请求上下文">
+            <NInput
+              v-model:value="formModel.reqData"
+              type="textarea"
+              :rows="4"
+              placeholder='可选，填写 JSON，例如 {"channel":"email"}'
+            />
+          </NFormItemGi>
+        </NGrid>
+      </NForm>
+      <template #footer>
+        <div class="flex justify-end gap-12px">
+          <NButton @click="modalVisible = false">取消</NButton>
+          <NButton type="primary" :loading="saving" @click="handleSubmit">保存</NButton>
+        </div>
+      </template>
+    </NModal>
   </div>
 </template>

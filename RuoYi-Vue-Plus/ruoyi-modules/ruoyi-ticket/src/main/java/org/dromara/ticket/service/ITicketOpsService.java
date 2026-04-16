@@ -34,6 +34,10 @@ public interface ITicketOpsService {
 
     TableDataInfo<TicketManagedAccountVo> selectAccountPage(TicketManagedAccountBo bo, PageQuery pageQuery);
 
+    TableDataInfo<TicketPhoneNumberVo> selectBindablePhonePage(Long platformId, TicketPhoneNumberBo bo, PageQuery pageQuery);
+
+    int createManagedAccount(TicketManagedAccountCreateBo bo);
+
     TableDataInfo<TicketManagedAccountVo> selectLoginableAccountPage(Long platformId, TicketManagedAccountBo bo, PageQuery pageQuery);
 
     R<Long> loginAccounts(Long platformId, TicketBatchLoginBo bo);

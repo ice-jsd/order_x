@@ -301,6 +301,11 @@ FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20003);
 
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
+SELECT 20301, '账号新增', 20003, 1, '', '', '', 1, 0, 'F', '0', '0', 'ticket:account:add', '#', 103, 1, SYSDATE(), NULL, NULL, ''
+FROM dual
+WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20301);
+
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
 SELECT 20006, '活动配置', 20000, 6, 'event', 'ticket/event/index', '', 1, 0, 'C', '0', '0', 'ticket:event:list', 'date', 103, 1, SYSDATE(), NULL, NULL, '活动配置菜单'
 FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20006);

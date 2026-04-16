@@ -239,6 +239,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         requirePlatform(platformId);
         LambdaQueryWrapper<TicketPhoneNumber> wrapper = Wrappers.lambdaQuery();
         wrapper.eq(StringUtils.isNotBlank(bo.getCountryCode()), TicketPhoneNumber::getCountryCode, bo.getCountryCode())
+            .eq(StringUtils.isNotBlank(bo.getSupplier()), TicketPhoneNumber::getSupplier, bo.getSupplier())
             .eq(TicketPhoneNumber::getStatus, "available")
             .like(StringUtils.isNotBlank(bo.getPhoneNumber()), TicketPhoneNumber::getPhoneNumber, bo.getPhoneNumber())
             .orderByDesc(TicketPhoneNumber::getPhoneId);
@@ -387,6 +388,74 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         Page<TicketManagedAccountVo> page = accountMapper.selectVoPage(pageQuery.build(), wrapper);
         enrichAccounts(page.getRecords());
         return TableDataInfo.build(page);
+    }
+
+    @Override
+    public TableDataInfo<TicketPhoneNumberVo> selectBindablePhonePage(Long platformId, TicketPhoneNumberBo bo, PageQuery pageQuery) {
+        return selectRegisterablePhonePage(platformId, bo, pageQuery);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int createManagedAccount(TicketManagedAccountCreateBo bo) {
+        TicketPlatformConfig platform = requirePlatform(bo.getPlatformId());
+        if (ObjectUtil.isNull(bo.getPhoneId())) {
+            throw new ServiceException("来源号码不能为空");
+        }
+
+        String email = StringUtils.trim(bo.getEmail());
+        if (StringUtils.isBlank(email)) {
+            throw new ServiceException("邮箱不能为空");
+        }
+
+        TicketPhoneNumber phone = phoneMapper.selectById(bo.getPhoneId());
+        if (phone == null) {
+            throw new ServiceException("号码不存在");
+        }
+        if (!"available".equals(phone.getStatus())) {
+            throw new ServiceException("号码不可用");
+        }
+
+        long emailExists = accountMapper.selectCount(new LambdaQueryWrapper<TicketManagedAccount>()
+            .eq(TicketManagedAccount::getPlatformId, platform.getPlatformId())
+            .eq(TicketManagedAccount::getEmail, email));
+        if (emailExists > 0) {
+            throw new ServiceException("同平台下邮箱已存在");
+        }
+
+        TicketPhonePlatformRelation relation = getRelation(platform.getPlatformId(), phone.getPhoneId());
+        if (relation != null && ACTIVE_RELATION_STATUSES.contains(relation.getStatus())) {
+            throw new ServiceException("该号码在当前平台已存在有效关系");
+        }
+
+        TicketManagedAccount account = new TicketManagedAccount();
+        account.setPlatformId(platform.getPlatformId());
+        account.setPhoneId(phone.getPhoneId());
+        account.setEmail(email);
+        account.setAccountInfo(normalizeJsonText(bo.getAccountInfo()));
+        account.setReqData(normalizeJsonText(bo.getReqData()));
+        account.setAccountStatus("registered");
+        account.setLoginStatus("offline");
+        account.setLastLoginTime(null);
+        account.setLastError(null);
+        saveAccount(account);
+
+        TicketPhonePlatformRelation targetRelation = relation == null ? new TicketPhonePlatformRelation() : relation;
+        targetRelation.setPhoneId(phone.getPhoneId());
+        targetRelation.setPlatformId(platform.getPlatformId());
+        targetRelation.setAccountId(account.getAccountId());
+        targetRelation.setStatus("registered");
+        targetRelation.setLastError(null);
+        targetRelation.setLastOperateTime(new Date());
+        saveRelation(targetRelation);
+
+        Map<String, Object> auditPayload = new LinkedHashMap<>();
+        auditPayload.put("platformId", platform.getPlatformId());
+        auditPayload.put("phoneId", phone.getPhoneId());
+        auditPayload.put("accountId", account.getAccountId());
+        auditPayload.put("email", account.getEmail());
+        recordAudit("account", "create", "account", String.valueOf(account.getAccountId()), "success", "账号已创建", auditPayload);
+        return 1;
     }
 
     @Override
@@ -611,8 +680,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
     @Transactional(rollbackFor = Exception.class)
     public int removeSaleTasks(Long[] taskIds) {
         cleanupPendingSaleTaskSchedules(Arrays.asList(taskIds), "任务已删除，执行计划已取消");
-        saleTaskAccountMapper.delete(new LambdaQueryWrapper<TicketSaleTaskAccount>()
-            .in(TicketSaleTaskAccount::getTaskId, Arrays.asList(taskIds)));
+        saleTaskAccountMapper.deleteByTaskIdsPhysical(Arrays.asList(taskIds));
         int rows = saleTaskMapper.deleteByIds(Arrays.asList(taskIds));
         recordAudit("saleTask", "remove", "saleTask", Arrays.toString(taskIds), "success", "商品抢购任务已删除", taskIds);
         return rows;
@@ -1419,6 +1487,11 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             .eq(TicketPhonePlatformRelation::getPhoneId, phoneId), false);
     }
 
+    private String normalizeJsonText(String value) {
+        String normalized = StringUtils.trim(value);
+        return StringUtils.isBlank(normalized) ? null : normalized;
+    }
+
     private TicketManagedAccount getOrCreateAccount(Long platformId, Long phoneId) {
         TicketManagedAccount account = accountMapper.selectOne(new LambdaQueryWrapper<TicketManagedAccount>()
             .eq(TicketManagedAccount::getPlatformId, platformId)
@@ -1431,6 +1504,14 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             relationMapper.insert(relation);
         } else {
             relationMapper.updateById(relation);
+            if (relation.getLastError() == null) {
+                relationMapper.update(
+                    null,
+                    Wrappers.<TicketPhonePlatformRelation>lambdaUpdate()
+                        .eq(TicketPhonePlatformRelation::getRelationId, relation.getRelationId())
+                        .set(TicketPhonePlatformRelation::getLastError, null)
+                );
+            }
         }
     }
 
@@ -1439,6 +1520,14 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             accountMapper.insert(account);
         } else {
             accountMapper.updateById(account);
+            if (account.getLastError() == null) {
+                accountMapper.update(
+                    null,
+                    Wrappers.<TicketManagedAccount>lambdaUpdate()
+                        .eq(TicketManagedAccount::getAccountId, account.getAccountId())
+                        .set(TicketManagedAccount::getLastError, null)
+                );
+            }
         }
     }
 
