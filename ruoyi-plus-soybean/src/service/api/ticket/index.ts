@@ -2,6 +2,7 @@ export * from './platform';
 export * from './phone';
 export * from './relation';
 export * from './account';
+export * from './mailbox-account';
 export * from './event';
 export * from './sale-task';
 export * from './order-execution';

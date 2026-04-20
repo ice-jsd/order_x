@@ -1278,6 +1278,7 @@ local.route.ticket = '票务运营';
 local.route.ticket_platform = '平台接入';
 local.route.ticket_phone = '号码池';
 local.route.ticket_account = '账号池';
+local.route['ticket_mailbox-account'] = '邮箱账号池';
 local.route.ticket_event = '活动配置';
 local.route['ticket_sale-task'] = '商品抢购任务';
 local.route['ticket_order-execution'] = '下单执行';

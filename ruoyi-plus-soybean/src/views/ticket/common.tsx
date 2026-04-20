@@ -34,6 +34,13 @@ export const accountStatusOptions = [
   { label: '停用', value: 'disabled' }
 ];
 
+export const mailboxStatusOptions = [
+  { label: '可用', value: 'available' },
+  { label: '已使用', value: 'used' },
+  { label: '创建失败', value: 'create_failed' },
+  { label: '停用', value: 'disabled' }
+];
+
 export const loginStatusOptions = [
   { label: '离线', value: 'offline' },
   { label: '已登录', value: 'logged_in' },
@@ -89,20 +96,9 @@ export const executionStatusOptions = [
   { label: '超时', value: 'timeout' }
 ];
 
-export const orderFlowTypeOptions = [
-  { label: '直接下单', value: 'direct_order' },
-  { label: '加购结算', value: 'cart_checkout' }
-];
-
-export const fulfillmentTypeOptions = [
-  { label: '快递配送', value: 'shipping' },
-  { label: '门店自提', value: 'pickup_store' }
-];
-
-export const paymentModeOptions = [
-  { label: '线上支付', value: 'online' },
-  { label: '门店付款', value: 'cod_store' },
-  { label: '人工支付', value: 'pending_manual' }
+export const purchaseTypeOptions = [
+  { label: '抢票', value: 'flash_sale' },
+  { label: '抽票', value: 'lottery' }
 ];
 
 export const paymentStatusOptions = [
@@ -142,6 +138,8 @@ const colorMap: Record<string, string> = {
   true: 'success',
   false: 'warning',
   available: 'success',
+  used: 'info',
+  create_failed: 'error',
   disabled: 'default',
   frozen: 'error',
   invalid: 'error',
@@ -172,13 +170,8 @@ const colorMap: Record<string, string> = {
   queued: 'default',
   running: 'info',
   submitted: 'success',
-  direct_order: 'info',
-  cart_checkout: 'warning',
-  shipping: 'success',
-  pickup_store: 'warning',
-  online: 'info',
-  cod_store: 'warning',
-  pending_manual: 'default',
+  flash_sale: 'info',
+  lottery: 'warning',
   pending_online: 'warning',
   offline_pending: 'warning',
   manual_pending: 'default',
@@ -196,6 +189,7 @@ const labelMap: Record<string, string> = Object.fromEntries(
     ...phoneStatusOptions,
     ...relationStatusOptions,
     ...accountStatusOptions,
+    ...mailboxStatusOptions,
     ...loginStatusOptions,
     ...batchStatusOptions,
     ...registerStepStatusOptions,
@@ -203,9 +197,7 @@ const labelMap: Record<string, string> = Object.fromEntries(
     ...taskModeOptions,
     ...taskStatusOptions,
     ...executionStatusOptions,
-    ...orderFlowTypeOptions,
-    ...fulfillmentTypeOptions,
-    ...paymentModeOptions,
+    ...purchaseTypeOptions,
     ...paymentStatusOptions,
     ...orderStepStatusOptions,
     ...orderCurrentStepOptions,

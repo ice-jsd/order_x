@@ -20,12 +20,11 @@ public class TicketOrderDispatchRequest {
     private String email;
     private String accountInfo;
     private String reqData;
-    private String productId;
+    private String purchaseType;
     private Integer purchaseQuantity;
     private Long scheduleVersion;
-    private String orderFlowType;
-    private String fulfillmentType;
-    private String paymentMode;
+    private String configSchemaKey;
+    private String configSnapshot;
     private String taskOptions;
     private List<TicketOrderFlowStep> flowSteps;
     private Date scheduledTime;

@@ -55,6 +55,7 @@ declare module "@elegant-router/types" {
     "ticket_account": "/ticket/account";
     "ticket_audit-log": "/ticket/audit-log";
     "ticket_event": "/ticket/event";
+    "ticket_mailbox-account": "/ticket/mailbox-account";
     "ticket_order-execution": "/ticket/order-execution";
     "ticket_phone": "/ticket/phone";
     "ticket_platform": "/ticket/platform";
@@ -159,6 +160,7 @@ declare module "@elegant-router/types" {
     | "ticket_account"
     | "ticket_audit-log"
     | "ticket_event"
+    | "ticket_mailbox-account"
     | "ticket_order-execution"
     | "ticket_phone"
     | "ticket_platform"

@@ -46,6 +46,7 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   ticket_account: () => import("@/views/ticket/account/index.vue"),
   "ticket_audit-log": () => import("@/views/ticket/audit-log/index.vue"),
   ticket_event: () => import("@/views/ticket/event/index.vue"),
+  "ticket_mailbox-account": () => import("@/views/ticket/mailbox-account/index.vue"),
   "ticket_order-execution": () => import("@/views/ticket/order-execution/index.vue"),
   ticket_phone: () => import("@/views/ticket/phone/index.vue"),
   ticket_platform: () => import("@/views/ticket/platform/index.vue"),

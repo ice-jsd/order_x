@@ -15,18 +15,8 @@ declare namespace Api {
       platformId: CommonType.IdType;
       platformCode: string;
       platformName: string;
-      adapterType: string;
-      environment: string;
       enabled: boolean;
-      supportsSms: boolean;
-      supportsEmail: boolean;
-      supportsPhoneIdentity: boolean;
-      callbackUrl: string;
       orderSubmitUrl: string;
-      callbackSecretMask: string;
-      registrationTemplate: string;
-      loginStrategy: string;
-      remark?: string;
     }>;
 
     type PlatformSearchParams = CommonType.RecordNullable<
@@ -37,18 +27,8 @@ declare namespace Api {
       platformId: CommonType.IdType;
       platformCode: string;
       platformName: string;
-      adapterType: string;
-      environment: string;
       enabled: boolean;
-      supportsSms: boolean;
-      supportsEmail: boolean;
-      supportsPhoneIdentity: boolean;
-      callbackUrl: string;
       orderSubmitUrl: string;
-      callbackSecretMask: string;
-      registrationTemplate: string;
-      loginStrategy: string;
-      remark: string;
     }>;
 
     type PlatformList = Api.Common.PaginatingQueryRecord<Platform>;
@@ -120,6 +100,11 @@ declare namespace Api {
       loginStatus: string;
       lastLoginTime: string;
       lastError?: string;
+      latestVerifyCode?: string;
+      latestActivationUrl?: string;
+      latestMailSubject?: string;
+      latestMailReceivedAt?: string;
+      latestMailMessageId?: string;
       platformName: string;
       phoneNumber: string;
     }>;
@@ -134,11 +119,15 @@ declare namespace Api {
     } & Api.Common.CommonSearchParams>;
 
     type AccountOperateParams = CommonType.RecordNullable<{
+      accountId: CommonType.IdType;
       platformId: CommonType.IdType;
       phoneId: CommonType.IdType;
       email: string;
       accountInfo: string;
       reqData: string;
+      accountStatus: string;
+      loginStatus: string;
+      lastError: string;
     }>;
 
     type AccountBindablePhoneSearchParams = CommonType.RecordNullable<{
@@ -149,6 +138,59 @@ declare namespace Api {
     } & Api.Common.CommonSearchParams>;
 
     type AccountList = Api.Common.PaginatingQueryRecord<Account>;
+
+    type MailboxAccount = Common.CommonTenantRecord<{
+      mailboxId: CommonType.IdType;
+      email: string;
+      username: string;
+      password: string;
+      domain: string;
+      provider: string;
+      stalwartPrincipalId?: string;
+      status: string;
+      usedAccountId?: CommonType.IdType;
+      usedTime?: string;
+      lastError?: string;
+      latestMailSubject?: string;
+      latestMailFrom?: string;
+      latestMailReceivedAt?: string;
+      latestMailMessageId?: string;
+      latestMailExcerpt?: string;
+      latestVerifyCode?: string;
+      latestActivationUrl?: string;
+      lastMailSyncTime?: string;
+      lastMailSyncError?: string;
+      usedAccountEmail?: string;
+    }>;
+
+    type MailboxAccountSearchParams = CommonType.RecordNullable<{
+      email: string;
+      status: string;
+    } & Api.Common.CommonSearchParams>;
+
+    type MailboxBatchCreateParams = {
+      count: number;
+    };
+
+    type MailboxBatchCreateResult = {
+      requestedCount: number;
+      successCount: number;
+      failedCount: number;
+      attemptCount: number;
+      createdEmails: string[];
+      failedMessages: string[];
+    };
+
+    type MailboxStatusParams = {
+      mailboxIds: CommonType.IdType[];
+      status: string;
+    };
+
+    type MailboxMailSyncParams = {
+      mailboxIds: CommonType.IdType[];
+    };
+
+    type MailboxAccountList = Api.Common.PaginatingQueryRecord<MailboxAccount>;
 
     type Event = Common.CommonTenantRecord<{
       eventId: CommonType.IdType;
@@ -182,12 +224,10 @@ declare namespace Api {
     type SaleTask = Common.CommonTenantRecord<{
       taskId: CommonType.IdType;
       platformId: CommonType.IdType;
-      productId: string;
       taskName: string;
       taskStatus: string;
-      orderFlowType: string;
-      fulfillmentType: string;
-      paymentMode: string;
+      purchaseType: 'flash_sale' | 'lottery' | string;
+      configSchemaKey?: string;
       warmupTime: string;
       scheduledTime: string;
       lastExecutedTime: string;
@@ -201,18 +241,16 @@ declare namespace Api {
     }>;
 
     type SaleTaskSearchParams = CommonType.RecordNullable<
-      Pick<SaleTask, 'platformId' | 'productId' | 'taskName' | 'taskStatus'> & Api.Common.CommonSearchParams
+      Pick<SaleTask, 'platformId' | 'purchaseType' | 'taskName' | 'taskStatus'> & Api.Common.CommonSearchParams
     >;
 
     type SaleTaskOperateParams = CommonType.RecordNullable<{
       taskId: CommonType.IdType;
       platformId: CommonType.IdType;
-      productId: string;
       taskName: string;
       taskStatus: string;
-      orderFlowType: string;
-      fulfillmentType: string;
-      paymentMode: string;
+      purchaseType: 'flash_sale' | 'lottery' | string;
+      configSchemaKey?: string;
       warmupTime: string;
       scheduledTime: string;
       purchaseQuantity: number;
@@ -228,11 +266,9 @@ declare namespace Api {
       taskId: CommonType.IdType;
       platformId: CommonType.IdType;
       accountId: CommonType.IdType;
-      productId: string;
+      purchaseType: 'flash_sale' | 'lottery' | string;
       purchaseQuantity: number;
-      flowType: string;
-      fulfillmentType: string;
-      paymentMode: string;
+      configSnapshot?: string;
       currentStep: string;
       stepStatus: string;
       stepTrace?: string;
@@ -250,7 +286,7 @@ declare namespace Api {
     }>;
 
     type OrderExecutionSearchParams = CommonType.RecordNullable<
-      Pick<OrderExecution, 'taskId' | 'platformId' | 'accountId' | 'productId' | 'orderNo' | 'executionStatus' | 'paymentStatus'> &
+      Pick<OrderExecution, 'taskId' | 'platformId' | 'accountId' | 'purchaseType' | 'orderNo' | 'executionStatus' | 'paymentStatus'> &
         Api.Common.CommonSearchParams
     >;
 
@@ -258,6 +294,13 @@ declare namespace Api {
 
     type OrderExecutionPaymentParams = {
       resultMessage: string;
+    };
+
+    type PurchaseTemplate = {
+      purchaseType: 'flash_sale' | 'lottery' | string;
+      configSchemaKey: string;
+      configTemplate: Record<string, any>;
+      editableFields: string[];
     };
 
     type AuditLog = Common.CommonTenantRecord<{

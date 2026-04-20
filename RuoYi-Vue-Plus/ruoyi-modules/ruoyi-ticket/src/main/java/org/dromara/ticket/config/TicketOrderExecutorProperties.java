@@ -63,4 +63,9 @@ public class TicketOrderExecutorProperties {
      * 执行心跳超时时间(秒)
      */
     private long heartbeatTimeoutSeconds = 30;
+
+    /**
+     * 自动预热提前量(ms)：未填写 warmupTime 时，提前把任务交给 Go 执行预备步骤。
+     */
+    private long autoWarmupLeadMs = 3000;
 }

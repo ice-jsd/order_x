@@ -30,6 +30,11 @@ public class TicketManagedAccount extends TenantEntity {
     private String loginStatus;
     private Date lastLoginTime;
     private String lastError;
+    private String latestVerifyCode;
+    private String latestActivationUrl;
+    private String latestMailSubject;
+    private Date latestMailReceivedAt;
+    private String latestMailMessageId;
 
     @TableLogic
     private Long delFlag;

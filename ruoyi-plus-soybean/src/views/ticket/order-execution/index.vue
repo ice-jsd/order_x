@@ -13,6 +13,7 @@ import { useAppStore } from '@/store/modules/app';
 import {
   executionStatusOptions,
   paymentStatusOptions,
+  purchaseTypeOptions,
   renderTicketEllipsis,
   renderTicketJsonSummary,
   renderTicketTag
@@ -32,7 +33,7 @@ function createSearchParams(): Api.Ticket.OrderExecutionSearchParams {
     taskId: null,
     platformId: null,
     accountId: null,
-    productId: null,
+    purchaseType: null,
     orderNo: null,
     executionStatus: null,
     paymentStatus: null,
@@ -55,50 +56,28 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
     columns: () => [
       { key: 'taskName', title: '抢购任务', align: 'center', minWidth: 180 },
       { key: 'platformName', title: '平台', align: 'center', minWidth: 140 },
-      { key: 'productId', title: '商品ID', align: 'center', minWidth: 180 },
       {
-        key: 'flowType',
-        title: '下单方式',
+        key: 'purchaseType',
+        title: '抢购类型',
         align: 'center',
         width: 110,
-        render: row => renderTicketTag(row.flowType)
+        render: row => renderTicketTag(row.purchaseType)
       },
-      {
-        key: 'fulfillmentType',
-        title: '履约方式',
-        align: 'center',
-        width: 110,
-        render: row => renderTicketTag(row.fulfillmentType)
-      },
-      {
-        key: 'paymentMode',
-        title: '支付方式',
-        align: 'center',
-        width: 110,
-        render: row => renderTicketTag(row.paymentMode)
-      },
-      { key: 'purchaseQuantity', title: '订单数量', align: 'center', width: 100 },
+      { key: 'purchaseQuantity', title: '单账号数量', align: 'center', width: 110 },
       { key: 'accountId', title: '账号ID', align: 'center', minWidth: 120 },
       {
         key: 'email',
         title: '邮箱',
-        align: 'center',
+        align: 'left',
         minWidth: 220,
         render: row => renderTicketEllipsis(row.email)
       },
       {
-        key: 'accountInfo',
-        title: '账号信息',
-        align: 'center',
-        minWidth: 220,
-        render: row => renderTicketJsonSummary(row.accountInfo, ['email', 'nickname', 'source'])
-      },
-      {
-        key: 'reqData',
-        title: '请求上下文',
-        align: 'center',
-        minWidth: 220,
-        render: row => renderTicketJsonSummary(row.reqData, ['sessionId', 'platformCode', 'loginAt'])
+        key: 'configSnapshot',
+        title: '配置摘要',
+        align: 'left',
+        minWidth: 260,
+        render: row => renderTicketJsonSummary(row.configSnapshot, ['ticketsPageUrl', 'ticketQuantity', 'paymentMethod', 'lotteryEntryUrl'])
       },
       { key: 'orderNo', title: '订单号', align: 'center', minWidth: 180 },
       {
@@ -112,7 +91,7 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
         key: 'currentStep',
         title: '当前步骤',
         align: 'center',
-        width: 120,
+        width: 130,
         render: row => renderTicketTag(row.currentStep)
       },
       {
@@ -139,15 +118,15 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
       {
         key: 'stepTrace',
         title: '步骤轨迹',
-        align: 'center',
-        minWidth: 220,
+        align: 'left',
+        minWidth: 240,
         render: row => renderTicketJsonSummary(row.stepTrace)
       },
       {
         key: 'rawResult',
         title: '原始结果',
-        align: 'center',
-        minWidth: 220,
+        align: 'left',
+        minWidth: 240,
         render: row => renderTicketJsonSummary(row.rawResult)
       },
       { key: 'executedAt', title: '执行时间', align: 'center', minWidth: 160 },
@@ -177,19 +156,23 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
   });
 
 async function loadOptions() {
-  const [{ data: platformList, error: platformError }, { data: taskList, error: taskError }] = await Promise.all([
-    fetchGetTicketPlatformList({ pageNum: 1, pageSize: 200, params: {} }),
-    fetchGetTicketSaleTaskList({ pageNum: 1, pageSize: 200, params: {} })
+  const [{ data: platformList, error: platformError }, { data: saleTaskList, error: taskError }] = await Promise.all([
+    fetchGetTicketPlatformList({ pageNum: 1, pageSize: 200, enabled: true }),
+    fetchGetTicketSaleTaskList({ pageNum: 1, pageSize: 200 })
   ]);
-  if (!platformError) {
-    platformOptions.value = (platformList.rows || []).map(item => ({
-      label: item.platformName,
-      value: item.platformId
-    }));
+
+  if (platformError || taskError) {
+    return;
   }
-  if (!taskError) {
-    taskOptions.value = (taskList.rows || []).map(item => ({ label: item.taskName, value: item.taskId }));
-  }
+
+  platformOptions.value = (platformList?.rows || []).map((item: Api.Ticket.Platform) => ({
+    label: item.platformName,
+    value: item.platformId
+  }));
+  taskOptions.value = (saleTaskList?.rows || []).map((item: Api.Ticket.SaleTask) => ({
+    label: item.taskName,
+    value: item.taskId
+  }));
 }
 
 onMounted(() => {
@@ -203,10 +186,9 @@ function resetSearch() {
 }
 
 async function handleMarkPaid(executionId: CommonType.IdType) {
-  const { error } = await fetchMarkTicketOrderExecutionPaid(executionId, {
+  await fetchMarkTicketOrderExecutionPaid(executionId, {
     resultMessage: '已支付'
   });
-  if (error) return;
   window.$message?.success('订单已标记为已支付');
   await getData();
 }
@@ -236,8 +218,14 @@ async function handleMarkPaid(executionId: CommonType.IdType) {
             class="w-180px"
           />
         </NFormItem>
-        <NFormItem label="商品ID">
-          <NInput v-model:value="searchParams.productId" clearable placeholder="请输入商品ID" />
+        <NFormItem label="抢购类型">
+          <NSelect
+            v-model:value="searchParams.purchaseType"
+            clearable
+            :options="purchaseTypeOptions"
+            placeholder="请选择抢购类型"
+            class="w-160px"
+          />
         </NFormItem>
         <NFormItem label="订单号">
           <NInput v-model:value="searchParams.orderNo" clearable placeholder="请输入订单号" />
@@ -247,7 +235,7 @@ async function handleMarkPaid(executionId: CommonType.IdType) {
             v-model:value="searchParams.executionStatus"
             clearable
             :options="executionStatusOptions"
-            placeholder="请选择状态"
+            placeholder="请选择执行状态"
             class="w-160px"
           />
         </NFormItem>
@@ -269,15 +257,9 @@ async function handleMarkPaid(executionId: CommonType.IdType) {
       </NForm>
     </NCard>
 
-    <NCard title="下单执行列表" :bordered="false" size="small" class="card-wrapper sm:flex-1-hidden">
+    <NCard title="下单执行" :bordered="false" size="small" class="card-wrapper sm:flex-1-hidden">
       <template #header-extra>
-        <TableHeaderOperation
-          v-model:columns="columnChecks"
-          :loading="loading"
-          :show-add="false"
-          :show-delete="false"
-          @refresh="getData"
-        />
+        <TableHeaderOperation v-model:columns="columnChecks" :loading="loading" :show-add="false" :show-delete="false" @refresh="getData" />
       </template>
       <NDataTable
         :columns="columns"
@@ -287,7 +269,6 @@ async function handleMarkPaid(executionId: CommonType.IdType) {
         :loading="loading"
         :flex-height="!appStore.isMobile"
         :scroll-x="scrollX"
-        :row-key="row => row.executionId"
         :pagination="mobilePagination"
         class="sm:h-full"
       />

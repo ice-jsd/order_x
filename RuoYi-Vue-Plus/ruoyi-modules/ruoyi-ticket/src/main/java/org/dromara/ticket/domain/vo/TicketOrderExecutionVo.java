@@ -20,11 +20,9 @@ public class TicketOrderExecutionVo implements Serializable {
     private Long taskId;
     private Long platformId;
     private Long accountId;
-    private String productId;
+    private String purchaseType;
     private Integer purchaseQuantity;
-    private String flowType;
-    private String fulfillmentType;
-    private String paymentMode;
+    private String configSnapshot;
     private String currentStep;
     private String stepStatus;
     private String stepTrace;

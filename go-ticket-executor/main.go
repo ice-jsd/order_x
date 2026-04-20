@@ -7,17 +7,22 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/redis/go-redis/v9"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -148,12 +153,11 @@ type dispatchRequest struct {
 	Email            string        `json:"email"`
 	AccountInfo      string        `json:"accountInfo"`
 	ReqData          string        `json:"reqData"`
-	ProductID        string        `json:"productId"`
+	PurchaseType     string        `json:"purchaseType"`
 	PurchaseQuantity flexibleInt   `json:"purchaseQuantity"`
 	ScheduleVersion  flexibleInt64 `json:"scheduleVersion"`
-	OrderFlowType    string        `json:"orderFlowType"`
-	FulfillmentType  string        `json:"fulfillmentType"`
-	PaymentMode      string        `json:"paymentMode"`
+	ConfigSchemaKey  string        `json:"configSchemaKey"`
+	ConfigSnapshot   string        `json:"configSnapshot"`
 	TaskOptions      string        `json:"taskOptions"`
 	FlowSteps        []flowStep    `json:"flowSteps"`
 	ScheduledTime    *flexibleTime `json:"scheduledTime"`
@@ -180,16 +184,33 @@ type stepTraceEntry struct {
 }
 
 type flowRuntime struct {
-	OrderNo       string
+	OrderNo         string
 	ExecutionStatus string
-	PaymentStatus string
-	CurrentStep   string
-	StepStatus    string
-	ResultMessage string
-	RawResult     string
-	TaskOptions   map[string]any
-	StepTrace     []stepTraceEntry
-	LastResponse  map[string]any
+	PaymentStatus   string
+	CurrentStep     string
+	StepStatus      string
+	ResultMessage   string
+	RawResult       string
+	TaskOptions     map[string]any
+	StepTrace       []stepTraceEntry
+	LastResponse    map[string]any
+	LivePocket      *livePocketState
+}
+
+type livePocketState struct {
+	// 这里只存“本次执行过程中动态长出来”的中间参数。
+	// 它们由前一步页面返回，供后一步继续提交使用，不适合提前固化到数据库字段中。
+	Client                 *http.Client
+	UserAgent              string
+	TicketsPageURL         string
+	SelectSeatURL          string
+	ConfirmURL             string
+	PurchaseURL            string
+	Step1AuthenticityToken string
+	TicketFieldName        string
+	EventID                string
+	ReserveID              string
+	Step3AuthenticityToken string
 }
 
 type dispatchResponse struct {
@@ -216,6 +237,12 @@ var (
 	releaseLockScript = redis.NewScript(`
 if redis.call("GET", KEYS[1]) == ARGV[1] then
 	return redis.call("DEL", KEYS[1])
+end
+return 0
+`)
+	renewLockScript = redis.NewScript(`
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+	return redis.call("EXPIRE", KEYS[1], ARGV[2])
 end
 return 0
 `)
@@ -306,7 +333,7 @@ func defaultConfig() config {
 		AccountLockTTLSeconds:     60,
 		HeartbeatIntervalSeconds:  5,
 		PendingReclaimIdleSeconds: 60,
-		DelayedPollIntervalMs:     200,
+		DelayedPollIntervalMs:     50,
 		RetryDelaySeconds:         3,
 	}
 }
@@ -519,7 +546,7 @@ func normalizeConfig(cfg *config) {
 		cfg.PendingReclaimIdleSeconds = 60
 	}
 	if cfg.DelayedPollIntervalMs <= 0 {
-		cfg.DelayedPollIntervalMs = 200
+		cfg.DelayedPollIntervalMs = 50
 	}
 	if cfg.RetryDelaySeconds <= 0 {
 		cfg.RetryDelaySeconds = 3
@@ -566,8 +593,8 @@ func handleDispatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.ExecutionID.Value() == 0 || req.AccountID.Value() == 0 || strings.TrimSpace(req.ProductID) == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"message": "missing execution/account/product info"})
+	if req.ExecutionID.Value() == 0 || req.AccountID.Value() == 0 || strings.TrimSpace(req.PurchaseType) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"message": "missing execution/account/purchase type info"})
 		return
 	}
 
@@ -777,18 +804,19 @@ func processStreamMessage(ctx context.Context, message redis.XMessage) {
 		return
 	}
 	log.Printf(
-		"execution %d started, task=%d account=%d flow=%s payment=%s",
+		"execution %d started, task=%d account=%d purchaseType=%s config=%s",
 		executionID,
 		req.TaskID.Value(),
 		req.AccountID.Value(),
-		req.OrderFlowType,
-		req.PaymentMode,
+		req.PurchaseType,
+		req.ConfigSchemaKey,
 	)
 
 	heartbeatCtx, stopHeartbeat := context.WithCancel(context.Background())
 	var heartbeatWG sync.WaitGroup
-	heartbeatWG.Add(1)
+	heartbeatWG.Add(2)
 	go keepHeartbeat(heartbeatCtx, &heartbeatWG, executionID)
+	go keepAccountLock(heartbeatCtx, &heartbeatWG, req.AccountID.Value(), lockToken)
 
 	runtime, flowErr := executeOrderFlow(req)
 	stopHeartbeat()
@@ -923,6 +951,27 @@ func keepHeartbeat(ctx context.Context, wg *sync.WaitGroup, executionID int64) {
 	}
 }
 
+func keepAccountLock(ctx context.Context, wg *sync.WaitGroup, accountID int64, token string) {
+	defer wg.Done()
+	ttl := time.Duration(appConfig.AccountLockTTLSeconds) * time.Second
+	interval := ttl / 3
+	if interval < time.Second {
+		interval = time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	renewAccountLock(context.Background(), accountID, token)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			renewAccountLock(context.Background(), accountID, token)
+		}
+	}
+}
+
 func writeHeartbeat(ctx context.Context, executionID int64) {
 	ttl := time.Duration(appConfig.HeartbeatIntervalSeconds*3) * time.Second
 	if err := redisClient.Set(ctx, heartbeatKey(executionID), consumerName, ttl).Err(); err != nil {
@@ -940,12 +989,12 @@ func writeHeartbeat(ctx context.Context, executionID int64) {
 
 func executeOrderFlow(req dispatchRequest) (*flowRuntime, error) {
 	runtime := &flowRuntime{
-		TaskOptions:      parseJSONObject(req.TaskOptions),
-		ExecutionStatus:  "running",
-		PaymentStatus:    initialPaymentStatus(req.PaymentMode),
-		CurrentStep:      "queued",
-		StepStatus:       "queued",
-		ResultMessage:    "等待执行",
+		TaskOptions:     parseJSONObject(req.TaskOptions),
+		ExecutionStatus: "running",
+		PaymentStatus:   initialPaymentStatus(resolvePaymentMode(req.AdapterType, parseJSONObject(req.TaskOptions))),
+		CurrentStep:     "queued",
+		StepStatus:      "queued",
+		ResultMessage:   "等待执行",
 	}
 
 	steps := req.FlowSteps
@@ -954,6 +1003,10 @@ func executeOrderFlow(req dispatchRequest) (*flowRuntime, error) {
 	}
 
 	for _, step := range steps {
+		if err := waitForScheduledTrigger(req, runtime, step); err != nil {
+			return runtime, err
+		}
+
 		startedAt := time.Now()
 		runtime.CurrentStep = currentStepLabel(step)
 		runtime.StepStatus = "running"
@@ -997,6 +1050,10 @@ func executeOrderFlow(req dispatchRequest) (*flowRuntime, error) {
 }
 
 func executeFlowStep(req dispatchRequest, runtime *flowRuntime, step flowStep) (map[string]any, error) {
+	if isLivePocketAdapter(req.AdapterType) {
+		return executeLivePocketStep(req, runtime, step)
+	}
+
 	if shouldCallPlatformForStep(req, step) {
 		resp, rawResult, rawMap, err := callPlatformStep(req, step, runtime)
 		if rawResult != "" {
@@ -1020,15 +1077,15 @@ func executeFlowStep(req dispatchRequest, runtime *flowRuntime, step flowStep) (
 			if runtime.OrderNo == "" {
 				runtime.OrderNo = fmt.Sprintf("pending-%d", req.ExecutionID.Value())
 			}
-			runtime.ExecutionStatus = normalizeExecutionStatus(resp.Status, req.PaymentMode)
+			runtime.ExecutionStatus = normalizeExecutionStatus(resp.Status, resolvePaymentMode(req.AdapterType, runtime.TaskOptions))
 			runtime.ResultMessage = defaultString(resp.Message, "订单已提交")
 		case "CREATE_ONLINE_PAYMENT":
-			runtime.ExecutionStatus = normalizeExecutionStatus(resp.Status, req.PaymentMode)
+			runtime.ExecutionStatus = normalizeExecutionStatus(resp.Status, resolvePaymentMode(req.AdapterType, runtime.TaskOptions))
 			runtime.PaymentStatus = defaultString(resp.PaymentStatus, "pending_online")
 			runtime.ResultMessage = defaultString(resp.Message, "支付单已创建，等待线上支付")
 		case "CONFIRM_PENDING_PAYMENT":
-			runtime.ExecutionStatus = normalizeExecutionStatus(resp.Status, req.PaymentMode)
-			runtime.PaymentStatus = defaultString(resp.PaymentStatus, initialPaymentStatus(req.PaymentMode))
+			runtime.ExecutionStatus = normalizeExecutionStatus(resp.Status, resolvePaymentMode(req.AdapterType, runtime.TaskOptions))
+			runtime.PaymentStatus = defaultString(resp.PaymentStatus, initialPaymentStatus(resolvePaymentMode(req.AdapterType, runtime.TaskOptions)))
 			runtime.ResultMessage = defaultString(resp.Message, "订单已提交，等待后续支付")
 		}
 		return mergeDetail(step.Options, rawMap), nil
@@ -1049,7 +1106,7 @@ func executeFlowStep(req dispatchRequest, runtime *flowRuntime, step flowStep) (
 		return mergeDetail(step.Options, runtime.TaskOptions), nil
 	case "SELECT_PAYMENT_MODE":
 		runtime.ResultMessage = "已选择支付方式"
-		return mergeDetail(step.Options, map[string]any{"paymentMode": req.PaymentMode}), nil
+		return mergeDetail(step.Options, map[string]any{"paymentMode": resolvePaymentMode(req.AdapterType, runtime.TaskOptions)}), nil
 	case "SUBMIT_ORDER":
 		resp, rawResult, rawMap, err := callPlatformStep(req, step, runtime)
 		if rawResult != "" {
@@ -1063,7 +1120,7 @@ func executeFlowStep(req dispatchRequest, runtime *flowRuntime, step flowStep) (
 		if runtime.OrderNo == "" {
 			runtime.OrderNo = fmt.Sprintf("pending-%d", req.ExecutionID.Value())
 		}
-		runtime.ExecutionStatus = normalizeExecutionStatus(resp.Status, req.PaymentMode)
+		runtime.ExecutionStatus = normalizeExecutionStatus(resp.Status, resolvePaymentMode(req.AdapterType, runtime.TaskOptions))
 		runtime.PaymentStatus = defaultString(resp.PaymentStatus, runtime.PaymentStatus)
 		runtime.ResultMessage = defaultString(resp.Message, "订单已提交")
 		return rawMap, nil
@@ -1074,11 +1131,60 @@ func executeFlowStep(req dispatchRequest, runtime *flowRuntime, step flowStep) (
 		return mergeDetail(step.Options, runtime.LastResponse), nil
 	case "CONFIRM_PENDING_PAYMENT":
 		runtime.ExecutionStatus = "pending_payment"
-		runtime.PaymentStatus = initialPaymentStatus(req.PaymentMode)
+		runtime.PaymentStatus = initialPaymentStatus(resolvePaymentMode(req.AdapterType, runtime.TaskOptions))
 		runtime.ResultMessage = "订单已提交，等待后续支付"
 		return mergeDetail(step.Options, runtime.LastResponse), nil
 	default:
 		return step.Options, fmt.Errorf("unsupported step type: %s", step.StepType)
+	}
+}
+
+func waitForScheduledTrigger(req dispatchRequest, runtime *flowRuntime, step flowStep) error {
+	if !isCriticalSubmitStep(step) {
+		return nil
+	}
+	triggerAt := scheduledTriggerTime(req)
+	if triggerAt == nil {
+		return nil
+	}
+	delay := time.Until(*triggerAt)
+	if delay <= 0 {
+		return nil
+	}
+
+	runtime.CurrentStep = currentStepLabel(step)
+	runtime.StepStatus = "waiting"
+	runtime.ResultMessage = fmt.Sprintf("%s等待计划抢购时间", stepLabel(step))
+	if err := updateExecutionStep(req.ExecutionID.Value(), runtime); err != nil {
+		return err
+	}
+
+	log.Printf(
+		"execution %d waiting %s until scheduled trigger %s before %s",
+		req.ExecutionID.Value(),
+		delay.Truncate(time.Millisecond),
+		triggerAt.Format(time.RFC3339Nano),
+		step.StepType,
+	)
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	<-timer.C
+	return nil
+}
+
+func scheduledTriggerTime(req dispatchRequest) *time.Time {
+	if req.ScheduledTime == nil {
+		return nil
+	}
+	return req.ScheduledTime.Ptr()
+}
+
+func isCriticalSubmitStep(step flowStep) bool {
+	switch strings.ToUpper(strings.TrimSpace(step.StepType)) {
+	case "SUBMIT_ORDER", "LP_SUBMIT_PURCHASE":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -1110,11 +1216,10 @@ func callPlatformStep(req dispatchRequest, step flowStep, runtime *flowRuntime) 
 		"email":            req.Email,
 		"accountInfo":      parseJSONString(req.AccountInfo),
 		"reqData":          parseJSONString(req.ReqData),
-		"productId":        req.ProductID,
+		"purchaseType":     req.PurchaseType,
 		"purchaseQuantity": req.PurchaseQuantity.Value(),
-		"orderFlowType":    req.OrderFlowType,
-		"fulfillmentType":  req.FulfillmentType,
-		"paymentMode":      req.PaymentMode,
+		"configSchemaKey":  req.ConfigSchemaKey,
+		"configSnapshot":   parseJSONString(req.ConfigSnapshot),
 		"orderNo":          runtime.OrderNo,
 		"currentStep":      runtime.CurrentStep,
 		"stepStatus":       runtime.StepStatus,
@@ -1160,10 +1265,10 @@ func callPlatformStep(req dispatchRequest, step flowStep, runtime *flowRuntime) 
 	}
 
 	resp := &platformStepResponse{
-		Success: readBool(raw["success"], true),
-		OrderNo: readString(raw["orderNo"], readString(raw["order_no"], "")),
-		Message: readString(raw["message"], ""),
-		Status:  readString(raw["status"], ""),
+		Success:       readBool(raw["success"], true),
+		OrderNo:       readString(raw["orderNo"], readString(raw["order_no"], "")),
+		Message:       readString(raw["message"], ""),
+		Status:        readString(raw["status"], ""),
 		PaymentStatus: readString(raw["paymentStatus"], readString(raw["payment_status"], "")),
 	}
 	if mockData, ok := raw["mockData"].(map[string]any); ok {
@@ -1176,6 +1281,555 @@ func callPlatformStep(req dispatchRequest, step flowStep, runtime *flowRuntime) 
 		return nil, string(rawBytes), raw, errors.New(resp.Message)
 	}
 	return resp, string(rawBytes), raw, nil
+}
+
+func executeLivePocketStep(req dispatchRequest, runtime *flowRuntime, step flowStep) (map[string]any, error) {
+	// LivePocket 不是一个“单接口下单”平台，而是页面驱动的多步骤链路：
+	// 第一步取页面 token，第二步创建 reserve，第三步再取最终确认 token，第四步才真正提交订单。
+	state, err := ensureLivePocketState(req, runtime)
+	if err != nil {
+		return nil, err
+	}
+
+	switch step.StepType {
+	case "LP_FETCH_TICKETS":
+		return livePocketFetchTickets(req, runtime, state, step)
+	case "LP_SELECT_SEAT":
+		return livePocketSelectSeat(req, runtime, state, step)
+	case "LP_CONFIRM_PURCHASE":
+		return livePocketConfirmPurchase(req, runtime, state, step)
+	case "LP_SUBMIT_PURCHASE":
+		return livePocketSubmitPurchase(req, runtime, state, step)
+	default:
+		return nil, fmt.Errorf("unsupported live pocket step: %s", step.StepType)
+	}
+}
+
+func ensureLivePocketState(req dispatchRequest, runtime *flowRuntime) (*livePocketState, error) {
+	if runtime.LivePocket != nil {
+		return runtime.LivePocket, nil
+	}
+
+	// taskOptions 放“任务固定参数”，例如 ticketsPageUrl / paymentMethod。
+	// reqData 放“账号登录态参数”，例如 cookies / userAgent。
+	// 两者组合后，Go 才有能力像浏览器一样继续走后续页面流程。
+	ticketsPageURL := strings.TrimSpace(readString(runtime.TaskOptions["ticketsPageUrl"], ""))
+	if ticketsPageURL == "" {
+		return nil, errors.New("LivePocket 缺少 ticketsPageUrl 配置")
+	}
+	pageURL, err := url.Parse(ticketsPageURL)
+	if err != nil {
+		return nil, fmt.Errorf("ticketsPageUrl 非法: %w", err)
+	}
+
+	jar, _ := cookiejar.New(nil)
+	cookies := extractLivePocketCookies(parseJSONString(req.ReqData))
+	if len(cookies) == 0 {
+		return nil, errors.New("LivePocket 登录态缺失，reqData 中没有可用 cookies")
+	}
+	jar.SetCookies(pageURL, cookies)
+
+	userAgent := defaultString(extractLivePocketUserAgent(parseJSONString(req.ReqData)), livePocketDefaultUserAgent())
+	selectSeatURL := resolveLivePocketSelectSeatURL(pageURL)
+	purchaseURL := pageURL.ResolveReference(&url.URL{Path: "/purchase"}).String()
+
+	runtime.LivePocket = &livePocketState{
+		Client: &http.Client{
+			Timeout: httpClient.Timeout,
+			Jar:     jar,
+		},
+		UserAgent:      userAgent,
+		TicketsPageURL: pageURL.String(),
+		SelectSeatURL:  selectSeatURL,
+		PurchaseURL:    purchaseURL,
+	}
+	return runtime.LivePocket, nil
+}
+
+func livePocketFetchTickets(req dispatchRequest, runtime *flowRuntime, state *livePocketState, step flowStep) (map[string]any, error) {
+	// 第一步的目标不是下单，而是把第二步需要的两个关键参数抠出来：
+	// 1. hidden form 的 authenticity_token
+	// 2. 动态票种字段名 tickets[票种ID]
+	body, finalURL, statusCode, err := livePocketDoRequest(state, http.MethodGet, state.TicketsPageURL, "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("获取票务页面失败: %w", err)
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("解析票务页面失败: %w", err)
+	}
+
+	token := strings.TrimSpace(doc.Find(`input[name="authenticity_token"]`).First().AttrOr("value", ""))
+	if token == "" {
+		return nil, errors.New("票务页面缺少 authenticity_token，可能登录态失效或页面结构已变化")
+	}
+	ticketFieldName := detectLivePocketTicketFieldName(doc, body)
+	if ticketFieldName == "" {
+		return nil, errors.New("票务页面未找到 tickets[票种ID] 字段")
+	}
+
+	state.Step1AuthenticityToken = token
+	if finalURL != "" {
+		state.TicketsPageURL = finalURL
+		if parsedURL, parseErr := url.Parse(finalURL); parseErr == nil {
+			state.SelectSeatURL = resolveLivePocketSelectSeatURL(parsedURL)
+			state.PurchaseURL = parsedURL.ResolveReference(&url.URL{Path: "/purchase"}).String()
+		}
+	}
+	state.TicketFieldName = ticketFieldName
+
+	detail := map[string]any{
+		"requestUrl":      state.TicketsPageURL,
+		"finalUrl":        finalURL,
+		"method":          http.MethodGet,
+		"httpStatus":      statusCode,
+		"ticketFieldName": ticketFieldName,
+		"authToken":       maskToken(token),
+		"bodyPreview":     bodyPreview(body),
+	}
+	runtime.RawResult = marshalJSON(detail)
+	runtime.LastResponse = detail
+	runtime.ResultMessage = "已获取 LivePocket 票务页面"
+	return mergeDetail(step.Options, detail), nil
+}
+
+func livePocketSelectSeat(req dispatchRequest, runtime *flowRuntime, state *livePocketState, step flowStep) (map[string]any, error) {
+	// 第二步用“第一步提取的动态票种字段名”+“任务配置里的购买数量”拼出表单，
+	// 成功后最重要的结果是 event_id 和 reserve_id，后续确认页与最终提交都依赖它们。
+	if state.Step1AuthenticityToken == "" || state.TicketFieldName == "" {
+		return nil, errors.New("LivePocket 第一步尚未完成，缺少票种字段或 authenticity_token")
+	}
+
+	quantity := readPositiveInt(step.Options["ticketQuantity"], req.PurchaseQuantity.Value(), 1)
+	form := url.Values{}
+	form.Set("authenticity_token", state.Step1AuthenticityToken)
+	form.Set(state.TicketFieldName, strconv.Itoa(quantity))
+
+	body, finalURL, statusCode, err := livePocketDoRequest(state, http.MethodPost, state.SelectSeatURL, state.TicketsPageURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("创建 LivePocket 预留失败: %w", err)
+	}
+
+	eventID, reserveID := extractLivePocketReserveInfo(finalURL, body)
+	if eventID == "" || reserveID == "" {
+		return nil, errors.New("LivePocket 预留成功页未提取到 id 或 reserve_id")
+	}
+
+	state.EventID = eventID
+	state.ReserveID = reserveID
+	state.ConfirmURL = buildLivePocketConfirmURL(state.PurchaseURL, eventID, reserveID)
+
+	detail := map[string]any{
+		"requestUrl":  state.SelectSeatURL,
+		"finalUrl":    finalURL,
+		"method":      http.MethodPost,
+		"httpStatus":  statusCode,
+		"eventId":     eventID,
+		"reserveId":   reserveID,
+		"ticketField": state.TicketFieldName,
+		"quantity":    quantity,
+		"bodyPreview": bodyPreview(body),
+	}
+	runtime.RawResult = marshalJSON(detail)
+	runtime.LastResponse = detail
+	runtime.ResultMessage = "已创建 LivePocket 预留"
+	return mergeDetail(step.Options, detail), nil
+}
+
+func livePocketConfirmPurchase(req dispatchRequest, runtime *flowRuntime, state *livePocketState, step flowStep) (map[string]any, error) {
+	// 第三步进入确认页，主要是拿最终提交表单需要的新 token，
+	// 同时确认 payment_method 这类字段在页面里是存在的。
+	if state.EventID == "" || state.ReserveID == "" || state.ConfirmURL == "" {
+		return nil, errors.New("LivePocket 缺少确认页参数，无法进入 purchase/confirm")
+	}
+
+	body, finalURL, statusCode, err := livePocketDoRequest(state, http.MethodGet, state.ConfirmURL, state.TicketsPageURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("获取 LivePocket 确认页失败: %w", err)
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("解析 LivePocket 确认页失败: %w", err)
+	}
+
+	token := strings.TrimSpace(doc.Find(`input[name="authenticity_token"]`).First().AttrOr("value", ""))
+	if token == "" {
+		return nil, errors.New("LivePocket 确认页缺少 authenticity_token")
+	}
+	paymentFieldFound := doc.Find(`[name="order_form[payment_method]"]`).Length() > 0
+	cvsFieldFound := doc.Find(`[name="order_form[sbps_web_cvs_type]"]`).Length() > 0
+	if !paymentFieldFound {
+		return nil, errors.New("LivePocket 确认页缺少 order_form[payment_method] 字段")
+	}
+
+	state.Step3AuthenticityToken = token
+	if finalURL != "" {
+		state.ConfirmURL = finalURL
+	}
+
+	detail := map[string]any{
+		"requestUrl":        state.ConfirmURL,
+		"finalUrl":          finalURL,
+		"method":            http.MethodGet,
+		"httpStatus":        statusCode,
+		"eventId":           state.EventID,
+		"reserveId":         state.ReserveID,
+		"authToken":         maskToken(token),
+		"paymentFieldFound": paymentFieldFound,
+		"cvsFieldFound":     cvsFieldFound,
+		"bodyPreview":       bodyPreview(body),
+	}
+	runtime.RawResult = marshalJSON(detail)
+	runtime.LastResponse = detail
+	runtime.ResultMessage = "已加载 LivePocket 确认页"
+	return mergeDetail(step.Options, detail), nil
+}
+
+func livePocketSubmitPurchase(req dispatchRequest, runtime *flowRuntime, state *livePocketState, step flowStep) (map[string]any, error) {
+	// 第四步才是真正下单。
+	// 这里会把第二步生成的 reserve/event 参数，与第三步拿到的最终 token 一起提交。
+	if state.Step3AuthenticityToken == "" || state.EventID == "" || state.ReserveID == "" {
+		return nil, errors.New("LivePocket 缺少最终提交所需参数")
+	}
+
+	paymentMethod := defaultString(readString(step.Options["paymentMethod"], ""), "cvs")
+	cvsType := defaultString(readString(step.Options["sbpsWebCvsType"], ""), "016")
+	followNotification := readPositiveInt(step.Options["followNotification"], 1, 1)
+	purchaseAgreementContent := readPositiveInt(step.Options["purchaseAgreementContent"], 1, 1)
+
+	form := url.Values{}
+	form.Set("authenticity_token", state.Step3AuthenticityToken)
+	form.Set("id", state.EventID)
+	form.Set("order_form[reserve_id]", state.ReserveID)
+	form.Set("order_form[event_id]", state.EventID)
+	form.Set("order_form[payment_method]", paymentMethod)
+	form.Set("order_form[sbps_web_cvs_type]", cvsType)
+	form.Set("order_form[follow_notification]", strconv.Itoa(followNotification))
+	form.Set("order_form[purchase_agreement_content]", strconv.Itoa(purchaseAgreementContent))
+
+	body, finalURL, statusCode, err := livePocketDoRequest(state, http.MethodPost, state.PurchaseURL, state.ConfirmURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("提交 LivePocket 订单失败: %w", err)
+	}
+
+	orderNo := extractLivePocketOrderNo(body)
+	if orderNo == "" {
+		// 如果结果页里没法稳定提取订单号，至少保留一个可追踪的兜底标识，
+		// 这样执行记录、日志和问题排查不会断链。
+		orderNo = fmt.Sprintf("livepocket-%s-%s", state.EventID, state.ReserveID)
+	}
+	runtime.OrderNo = orderNo
+	runtime.ExecutionStatus = normalizeExecutionStatus("submitted", resolvePaymentMode(req.AdapterType, runtime.TaskOptions))
+	runtime.ResultMessage = "LivePocket 订单提交成功"
+
+	detail := map[string]any{
+		"requestUrl":     state.PurchaseURL,
+		"finalUrl":       finalURL,
+		"method":         http.MethodPost,
+		"httpStatus":     statusCode,
+		"eventId":        state.EventID,
+		"reserveId":      state.ReserveID,
+		"orderNo":        orderNo,
+		"paymentMethod":  paymentMethod,
+		"sbpsWebCvsType": cvsType,
+		"bodyPreview":    bodyPreview(body),
+	}
+	runtime.RawResult = marshalJSON(detail)
+	runtime.LastResponse = detail
+	return mergeDetail(step.Options, detail), nil
+}
+
+func livePocketDoRequest(state *livePocketState, method string, requestURL string, referer string, body io.Reader) (string, string, int, error) {
+	// 统一在这里补浏览器常见 header。
+	// Cookie 不手写在 Header 中，而是恢复到 cookiejar 里，由 http.Client 自动带上。
+	httpReq, err := http.NewRequestWithContext(context.Background(), method, requestURL, body)
+	if err != nil {
+		return "", "", 0, err
+	}
+	httpReq.Header.Set("User-Agent", state.UserAgent)
+	httpReq.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	httpReq.Header.Set("Accept-Language", "ja,en-US;q=0.9,en;q=0.8")
+	if referer != "" {
+		httpReq.Header.Set("Referer", referer)
+	}
+	if method == http.MethodPost {
+		httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		if parsedURL, parseErr := url.Parse(requestURL); parseErr == nil {
+			httpReq.Header.Set("Origin", parsedURL.Scheme+"://"+parsedURL.Host)
+		}
+	}
+
+	httpResp, err := state.Client.Do(httpReq)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, syscall.ETIMEDOUT) {
+			return "", "", 0, fmt.Errorf("请求超时: %w", err)
+		}
+		return "", "", 0, err
+	}
+	defer httpResp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return "", "", httpResp.StatusCode, err
+	}
+	finalURL := requestURL
+	if httpResp.Request != nil && httpResp.Request.URL != nil {
+		finalURL = httpResp.Request.URL.String()
+	}
+	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
+		return "", finalURL, httpResp.StatusCode, fmt.Errorf("HTTP %d: %s", httpResp.StatusCode, bodyPreview(string(bodyBytes)))
+	}
+	return string(bodyBytes), finalURL, httpResp.StatusCode, nil
+}
+
+func resolveLivePocketSelectSeatURL(pageURL *url.URL) string {
+	selectURL := *pageURL
+	if strings.HasSuffix(selectURL.Path, "/tickets") {
+		selectURL.Path = strings.TrimSuffix(selectURL.Path, "/tickets") + "/select_seat"
+	}
+	return selectURL.String()
+}
+
+func buildLivePocketConfirmURL(purchaseURL string, eventID string, reserveID string) string {
+	confirmURL, err := url.Parse(purchaseURL)
+	if err != nil {
+		return fmt.Sprintf("https://livepocket.jp/purchase/confirm?id=%s&reserve_id=%s", eventID, reserveID)
+	}
+	confirmURL.Path = "/purchase/confirm"
+	query := confirmURL.Query()
+	query.Set("id", eventID)
+	query.Set("reserve_id", reserveID)
+	confirmURL.RawQuery = query.Encode()
+	return confirmURL.String()
+}
+
+func detectLivePocketTicketFieldName(doc *goquery.Document, body string) string {
+	ticketFieldName := ""
+	doc.Find(`[name]`).EachWithBreak(func(_ int, selection *goquery.Selection) bool {
+		name, ok := selection.Attr("name")
+		if ok && strings.HasPrefix(name, "tickets[") && strings.HasSuffix(name, "]") {
+			ticketFieldName = name
+			return false
+		}
+		return true
+	})
+	if ticketFieldName != "" {
+		return ticketFieldName
+	}
+	// 真实页面不一定把 tickets[...] 直接渲染成 input[name]，
+	// 你给的 Apifox 样例里可以从票卡 DOM id 里的 ev_2660700 反推出 ticket id。
+	re := regexp.MustCompile(`ev_(\d+)(?:_|")`)
+	match := re.FindStringSubmatch(body)
+	if len(match) == 2 {
+		return fmt.Sprintf("tickets[%s]", match[1])
+	}
+	return ""
+}
+
+func extractLivePocketReserveInfo(finalURL string, body string) (string, string) {
+	// reserve 信息优先从最终 URL 取；如果 URL 不够直观，再从 HTML 文本里兜底提取。
+	checkCandidates := []string{finalURL, html.UnescapeString(body)}
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`/purchase/confirm\?id=([0-9]+)&reserve_id=([0-9]+)`),
+		regexp.MustCompile(`reserve_id=([0-9]+)`),
+	}
+	for _, candidate := range checkCandidates {
+		if candidate == "" {
+			continue
+		}
+		if parsedURL, err := url.Parse(candidate); err == nil {
+			query := parsedURL.Query()
+			if strings.TrimSpace(query.Get("id")) != "" && strings.TrimSpace(query.Get("reserve_id")) != "" {
+				return query.Get("id"), query.Get("reserve_id")
+			}
+		}
+		if match := patterns[0].FindStringSubmatch(candidate); len(match) == 3 {
+			return match[1], match[2]
+		}
+		if strings.Contains(candidate, "reserve_id=") {
+			if reserveMatch := patterns[1].FindStringSubmatch(candidate); len(reserveMatch) == 2 {
+				eventMatch := regexp.MustCompile(`id=([0-9]+)`).FindStringSubmatch(candidate)
+				if len(eventMatch) == 2 {
+					return eventMatch[1], reserveMatch[1]
+				}
+			}
+		}
+	}
+	return "", ""
+}
+
+func extractLivePocketOrderNo(body string) string {
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`申込(?:み)?番号[^0-9A-Za-z]*([0-9A-Za-z-]{6,})`),
+		regexp.MustCompile(`注文番号[^0-9A-Za-z]*([0-9A-Za-z-]{6,})`),
+		regexp.MustCompile(`order[_ ]?no[^0-9A-Za-z]*([0-9A-Za-z-]{6,})`),
+	}
+	for _, pattern := range patterns {
+		if match := pattern.FindStringSubmatch(body); len(match) == 2 {
+			return match[1]
+		}
+	}
+	return ""
+}
+
+func extractLivePocketCookies(reqData any) []*http.Cookie {
+	// reqData 允许多种来源形态：
+	// - cookies 数组
+	// - cookieHeader 字符串
+	// - name/value map
+	// 这里先兼容常见格式，减少外部登录回传时的耦合。
+	value := reqData
+	if root, ok := reqData.(map[string]any); ok {
+		if cookies, exists := root["cookies"]; exists {
+			value = cookies
+		} else if cookieHeader, exists := root["cookieHeader"]; exists {
+			value = cookieHeader
+		} else if cookieValue, exists := root["cookie"]; exists {
+			value = cookieValue
+		}
+	}
+
+	switch cookies := value.(type) {
+	case string:
+		return parseCookieHeader(cookies)
+	case []any:
+		result := make([]*http.Cookie, 0, len(cookies))
+		for _, item := range cookies {
+			if cookie := parseCookieItem(item); cookie != nil {
+				result = append(result, cookie)
+			}
+		}
+		return result
+	case map[string]any:
+		result := make([]*http.Cookie, 0, len(cookies))
+		for name, rawValue := range cookies {
+			value := readString(rawValue, "")
+			if strings.TrimSpace(name) != "" && strings.TrimSpace(value) != "" {
+				result = append(result, &http.Cookie{Name: name, Value: value, Path: "/"})
+			}
+		}
+		return result
+	default:
+		return nil
+	}
+}
+
+func parseCookieItem(item any) *http.Cookie {
+	if item == nil {
+		return nil
+	}
+	if cookieMap, ok := item.(map[string]any); ok {
+		name := defaultString(readString(cookieMap["name"], ""), readString(cookieMap["Name"], ""))
+		value := defaultString(readString(cookieMap["value"], ""), readString(cookieMap["Value"], ""))
+		if strings.TrimSpace(name) == "" || strings.TrimSpace(value) == "" {
+			return nil
+		}
+		cookie := &http.Cookie{
+			Name:   name,
+			Value:  value,
+			Path:   defaultString(readString(cookieMap["path"], ""), "/"),
+			Domain: readString(cookieMap["domain"], ""),
+		}
+		return cookie
+	}
+	if text, ok := item.(string); ok {
+		cookies := parseCookieHeader(text)
+		if len(cookies) > 0 {
+			return cookies[0]
+		}
+	}
+	return nil
+}
+
+func parseCookieHeader(header string) []*http.Cookie {
+	// 这里只做最小可用的 Cookie 恢复：
+	// 目标是恢复会话，不是完整实现浏览器 Cookie 规范。
+	parts := strings.Split(header, ";")
+	result := make([]*http.Cookie, 0, len(parts))
+	for _, part := range parts {
+		segment := strings.TrimSpace(part)
+		if segment == "" {
+			continue
+		}
+		name, value, found := strings.Cut(segment, "=")
+		if !found {
+			continue
+		}
+		name = strings.TrimSpace(name)
+		value = strings.TrimSpace(value)
+		if name == "" || value == "" {
+			continue
+		}
+		result = append(result, &http.Cookie{Name: name, Value: value, Path: "/"})
+	}
+	return result
+}
+
+func extractLivePocketUserAgent(reqData any) string {
+	root, ok := reqData.(map[string]any)
+	if !ok {
+		return ""
+	}
+	if userAgent := readString(root["userAgent"], ""); userAgent != "" {
+		return userAgent
+	}
+	if headers, ok := root["headers"].(map[string]any); ok {
+		for _, key := range []string{"User-Agent", "user-agent", "userAgent"} {
+			if userAgent := readString(headers[key], ""); userAgent != "" {
+				return userAgent
+			}
+		}
+	}
+	return ""
+}
+
+func livePocketDefaultUserAgent() string {
+	return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
+}
+
+func readPositiveInt(value any, fallback int, minimum int) int {
+	switch parsed := value.(type) {
+	case float64:
+		if int(parsed) >= minimum {
+			return int(parsed)
+		}
+	case int:
+		if parsed >= minimum {
+			return parsed
+		}
+	case string:
+		if number, err := strconv.Atoi(strings.TrimSpace(parsed)); err == nil && number >= minimum {
+			return number
+		}
+	}
+	if fallback >= minimum {
+		return fallback
+	}
+	return minimum
+}
+
+func maskToken(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if len(value) <= 12 {
+		return value
+	}
+	return value[:6] + "..." + value[len(value)-4:]
+}
+
+func bodyPreview(body string) string {
+	body = strings.Join(strings.Fields(html.UnescapeString(body)), " ")
+	if len(body) > 320 {
+		return body[:320]
+	}
+	return body
+}
+
+func marshalJSON(value any) string {
+	bytes, _ := json.Marshal(value)
+	return string(bytes)
 }
 
 func updateExecutionStep(executionID int64, runtime *flowRuntime) error {
@@ -1250,7 +1904,7 @@ func finalizeRuntime(req dispatchRequest, runtime *flowRuntime) {
 	if runtime.OrderNo == "" {
 		runtime.OrderNo = fmt.Sprintf("pending-%d", req.ExecutionID.Value())
 	}
-	switch req.PaymentMode {
+	switch resolvePaymentMode(req.AdapterType, runtime.TaskOptions) {
 	case "online":
 		if runtime.ExecutionStatus == "paid" || runtime.PaymentStatus == "paid" {
 			runtime.ExecutionStatus = "paid"
@@ -1287,18 +1941,22 @@ func failureStatus(status string) string {
 }
 
 func defaultFlowSteps(req dispatchRequest) []flowStep {
+	taskOptions := parseJSONObject(req.TaskOptions)
 	steps := make([]flowStep, 0, 5)
-	if req.OrderFlowType == "cart_checkout" {
+	purchaseMode := readString(taskOptions["purchaseMode"], "")
+	if purchaseMode == "cart_checkout" {
 		steps = append(steps, flowStep{StepType: "ADD_TO_CART", CurrentStep: "carting", Label: "加入购物车"})
+	} else {
+		steps = append(steps, flowStep{StepType: "DIRECT_BUY", CurrentStep: "checking_out", Label: "直接下单"})
 	}
-	if req.FulfillmentType == "pickup_store" {
+	if readString(taskOptions["fulfillmentMode"], "") == "pickup_store" {
 		steps = append(steps, flowStep{StepType: "SELECT_PICKUP_STORE", CurrentStep: "selecting_fulfillment", Label: "选择门店自提"})
 	} else {
 		steps = append(steps, flowStep{StepType: "SELECT_DELIVERY", CurrentStep: "selecting_fulfillment", Label: "选择配送方式"})
 	}
 	steps = append(steps, flowStep{StepType: "SELECT_PAYMENT_MODE", CurrentStep: "selecting_payment", Label: "选择支付方式"})
 	steps = append(steps, flowStep{StepType: "SUBMIT_ORDER", CurrentStep: "creating_order", Label: "提交订单"})
-	switch req.PaymentMode {
+	switch resolvePaymentMode(req.AdapterType, taskOptions) {
 	case "online":
 		steps = append(steps, flowStep{StepType: "CREATE_ONLINE_PAYMENT", CurrentStep: "awaiting_payment", Label: "创建线上支付"})
 	case "pending_manual":
@@ -1318,6 +1976,22 @@ func initialPaymentStatus(paymentMode string) string {
 	default:
 		return "manual_pending"
 	}
+}
+
+func resolvePaymentMode(adapterType string, taskOptions map[string]any) string {
+	if paymentMode := readString(taskOptions["paymentMode"], ""); paymentMode != "" {
+		return paymentMode
+	}
+	if isLivePocketAdapter(adapterType) {
+		if strings.EqualFold(readString(taskOptions["paymentMethod"], ""), "cvs") {
+			return "cod_store"
+		}
+	}
+	return "pending_manual"
+}
+
+func isLivePocketAdapter(adapterType string) bool {
+	return strings.EqualFold(strings.TrimSpace(adapterType), "livepocket")
 }
 
 func currentStepLabel(step flowStep) string {
@@ -1395,6 +2069,18 @@ func acquireAccountLock(ctx context.Context, accountID int64, token string) (boo
 func releaseAccountLock(ctx context.Context, accountID int64, token string) {
 	if err := releaseLockScript.Run(ctx, redisClient, []string{accountLockKey(accountID)}, token).Err(); err != nil && err != redis.Nil {
 		log.Printf("release account lock failed for account %d: %v", accountID, err)
+	}
+}
+
+func renewAccountLock(ctx context.Context, accountID int64, token string) {
+	if err := renewLockScript.Run(
+		ctx,
+		redisClient,
+		[]string{accountLockKey(accountID)},
+		token,
+		strconv.Itoa(appConfig.AccountLockTTLSeconds),
+	).Err(); err != nil && err != redis.Nil {
+		log.Printf("renew account lock failed for account %d: %v", accountID, err)
 	}
 }
 

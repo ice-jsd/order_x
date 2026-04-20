@@ -26,6 +26,11 @@ public class TicketManagedAccountVo implements Serializable {
     private String loginStatus;
     private Date lastLoginTime;
     private String lastError;
+    private String latestVerifyCode;
+    private String latestActivationUrl;
+    private String latestMailSubject;
+    private Date latestMailReceivedAt;
+    private String latestMailMessageId;
     private String platformName;
     private String phoneNumber;
 }

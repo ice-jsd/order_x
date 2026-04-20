@@ -12,6 +12,7 @@ import org.dromara.common.mybatis.core.page.TableDataInfo;
 import org.dromara.common.web.core.BaseController;
 import org.dromara.ticket.domain.bo.TicketPlatformConfigBo;
 import org.dromara.ticket.domain.vo.TicketPlatformConfigVo;
+import org.dromara.ticket.domain.vo.TicketPurchaseTemplateVo;
 import org.dromara.ticket.service.ITicketOpsService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -41,6 +42,12 @@ public class TicketPlatformController extends BaseController {
     @GetMapping("/{platformId}")
     public R<TicketPlatformConfigVo> getInfo(@PathVariable Long platformId) {
         return R.ok(ticketOpsService.selectPlatformById(platformId));
+    }
+
+    @SaCheckPermission("ticket:platform:query")
+    @GetMapping("/{platformId}/purchase-template")
+    public R<TicketPurchaseTemplateVo> getPurchaseTemplate(@PathVariable Long platformId, String purchaseType) {
+        return R.ok(ticketOpsService.getPurchaseTemplate(platformId, purchaseType));
     }
 
     @SaCheckPermission("ticket:platform:add")

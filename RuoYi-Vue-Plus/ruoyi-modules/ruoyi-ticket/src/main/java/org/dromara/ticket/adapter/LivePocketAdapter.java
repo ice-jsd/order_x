@@ -6,6 +6,7 @@ import org.dromara.ticket.domain.TicketManagedAccount;
 import org.dromara.ticket.domain.TicketPhoneNumber;
 import org.dromara.ticket.domain.TicketPlatformConfig;
 import org.dromara.ticket.domain.TicketSaleTask;
+import org.dromara.ticket.domain.vo.TicketPurchaseTemplateVo;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -18,7 +19,7 @@ public class LivePocketAdapter implements TicketPlatformAdapter {
 
     @Override
     public String adapterType() {
-        return "live_pocket";
+        return "livepocket";
     }
 
     @Override
@@ -84,9 +85,73 @@ public class LivePocketAdapter implements TicketPlatformAdapter {
     }
 
     @Override
+    public TicketPurchaseTemplateVo getPurchaseTemplate(TicketPlatformConfig platform, String purchaseType) {
+        if (TicketOrderFlowSupport.isLottery(purchaseType)) {
+            Map<String, Object> template = new LinkedHashMap<>();
+            template.put("lotteryEntryUrl", "");
+            template.put("entryQuantity", 1);
+            template.put("notificationPreference", "email");
+            template.put("notes", "抽票链路首版仅支持配置建模，不执行真实请求");
+            return TicketOrderFlowSupport.buildTemplate(
+                platform,
+                purchaseType,
+                template,
+                List.of("lotteryEntryUrl", "entryQuantity", "notificationPreference", "notes")
+            );
+        }
+
+        Map<String, Object> template = new LinkedHashMap<>();
+        template.put("ticketsPageUrl", "");
+        template.put("ticketQuantity", 1);
+        template.put("paymentMethod", "cvs");
+        template.put("sbpsWebCvsType", "016");
+        template.put("followNotification", 1);
+        template.put("purchaseAgreementContent", 1);
+        return TicketOrderFlowSupport.buildTemplate(
+            platform,
+            purchaseType,
+            template,
+            List.of(
+                "ticketsPageUrl",
+                "ticketQuantity",
+                "paymentMethod",
+                "sbpsWebCvsType",
+                "followNotification",
+                "purchaseAgreementContent"
+            )
+        );
+    }
+
+    @Override
     public TicketOrderFlowDefinition buildOrderFlow(TicketPlatformConfig platform, TicketSaleTask saleTask, TicketManagedAccount account) {
-        TicketOrderFlowDefinition definition = TicketOrderFlowSupport.buildDefaultFlow(platform, saleTask, account);
-        definition.getSteps().forEach(step -> step.getOptions().put("adapter", adapterType()));
+        TicketOrderFlowDefinition definition = new TicketOrderFlowDefinition();
+        definition.setPurchaseType(TicketOrderFlowSupport.defaultPurchaseType(saleTask.getPurchaseType()));
+        definition.setConfigSchemaKey(saleTask.getConfigSchemaKey());
+
+        Map<String, Object> baseOptions = TicketOrderFlowSupport.baseOptions(platform, saleTask, account);
+        Map<String, Object> taskOptions = TicketOrderFlowSupport.parseTaskOptions(saleTask.getTaskOptions());
+
+        Map<String, Object> fetchOptions = new LinkedHashMap<>(baseOptions);
+        fetchOptions.putAll(taskOptions);
+        fetchOptions.put("adapter", adapterType());
+        definition.getSteps().add(TicketOrderFlowSupport.step("LP_FETCH_TICKETS", "checking_out", "获取票务页面", fetchOptions));
+
+        Map<String, Object> selectSeatOptions = new LinkedHashMap<>(taskOptions);
+        selectSeatOptions.put("ticketQuantity", taskOptions.getOrDefault("ticketQuantity", saleTask.getPurchaseQuantity()));
+        selectSeatOptions.put("adapter", adapterType());
+        definition.getSteps().add(TicketOrderFlowSupport.step("LP_SELECT_SEAT", "checking_out", "选择票种并创建预留", selectSeatOptions));
+
+        Map<String, Object> confirmOptions = new LinkedHashMap<>(taskOptions);
+        confirmOptions.put("adapter", adapterType());
+        definition.getSteps().add(TicketOrderFlowSupport.step("LP_CONFIRM_PURCHASE", "checking_out", "确认购买信息", confirmOptions));
+
+        Map<String, Object> submitOptions = new LinkedHashMap<>(taskOptions);
+        submitOptions.put("paymentMethod", taskOptions.getOrDefault("paymentMethod", "cvs"));
+        submitOptions.put("sbpsWebCvsType", taskOptions.getOrDefault("sbpsWebCvsType", "016"));
+        submitOptions.put("followNotification", taskOptions.getOrDefault("followNotification", 1));
+        submitOptions.put("purchaseAgreementContent", taskOptions.getOrDefault("purchaseAgreementContent", 1));
+        submitOptions.put("adapter", adapterType());
+        definition.getSteps().add(TicketOrderFlowSupport.step("LP_SUBMIT_PURCHASE", "creating_order", "提交 LivePocket 订单", submitOptions));
         return definition;
     }
 
@@ -95,23 +160,15 @@ public class LivePocketAdapter implements TicketPlatformAdapter {
         TicketOrderResult result = new TicketOrderResult();
         result.setSuccess(true);
         result.setCurrentStep(step.getCurrentStep());
-        if ("SUBMIT_ORDER".equals(step.getStepType())) {
+        if ("LP_SUBMIT_PURCHASE".equals(step.getStepType()) || "SUBMIT_ORDER".equals(step.getStepType())) {
             result.setOrderNo(platform.getPlatformCode() + "-order-" + RandomUtil.randomNumbers(8));
-            result.setExecutionStatus("submitted");
-            result.setPaymentStatus(TicketOrderFlowSupport.initialPaymentStatus(context.getSaleTask().getPaymentMode()));
-            result.setMessage("live pocket mock submit ok");
-        } else if ("CREATE_ONLINE_PAYMENT".equals(step.getStepType())) {
             result.setExecutionStatus("pending_payment");
-            result.setPaymentStatus("pending_online");
-            result.setMessage("live pocket mock payment created");
-        } else if ("CONFIRM_PENDING_PAYMENT".equals(step.getStepType())) {
-            result.setExecutionStatus("pending_payment");
-            result.setPaymentStatus("manual_pending");
-            result.setMessage("live pocket pending payment");
+            result.setPaymentStatus(TicketOrderFlowSupport.initialPaymentStatus(context.getSaleTask().getPurchaseType(), context.getTaskOptions()));
+            result.setMessage("live pocket compatibility submit ok");
         } else {
             result.setExecutionStatus("running");
             result.setPaymentStatus(context.getPaymentStatus());
-            result.setMessage("live pocket mock step ok: " + step.getStepType());
+            result.setMessage("live pocket compatibility step ok: " + step.getStepType());
         }
         result.setStepTrace(JSONUtil.toJsonStr(step.getOptions()));
         return result;
@@ -123,7 +180,7 @@ public class LivePocketAdapter implements TicketPlatformAdapter {
         result.setSuccess(true);
         result.setOrderNo(context.getOrderNo());
         result.setCurrentStep("completed");
-        result.setExecutionStatus("online".equals(context.getSaleTask().getPaymentMode()) ? "pending_payment" : "submitted");
+        result.setExecutionStatus("pending_payment");
         result.setPaymentStatus(context.getPaymentStatus());
         result.setMessage("live pocket order finalized");
         return result;

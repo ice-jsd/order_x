@@ -11,3 +11,7 @@ export function fetchGetTicketBindablePhoneList(params?: Api.Ticket.AccountBinda
 export function fetchCreateTicketAccount(data: Api.Ticket.AccountOperateParams) {
   return request<boolean>({ url: '/ticket/account', method: 'post', data });
 }
+
+export function fetchUpdateTicketAccount(data: Api.Ticket.AccountOperateParams) {
+  return request<boolean>({ url: '/ticket/account', method: 'put', data });
+}

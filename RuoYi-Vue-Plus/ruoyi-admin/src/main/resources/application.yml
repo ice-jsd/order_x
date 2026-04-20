@@ -250,19 +250,44 @@ websocket:
   allowedOrigins: '*'
 
 --- # ticket 商品抢购执行器
-ticket:
-  order-executor:
-    mode: "redis"
-    base-url: "http://127.0.0.1:8099"
-    dispatch-path: "/internal/purchase-task/dispatch"
-    timeout-ms: 5000
-    stream-key: "ticket:purchase:stream:ready"
-    delayed-zset-key: "ticket:purchase:zset:delayed"
-    job-key-prefix: "ticket:purchase:job:"
-    heartbeat-key-prefix: "ticket:purchase:heartbeat:"
-    account-lock-key-prefix: "ticket:purchase:lock:account:"
-    job-ttl-seconds: 86400
-    heartbeat-timeout-seconds: 30
+  ticket:
+    order-executor:
+      mode: "redis"
+      base-url: "http://127.0.0.1:8099"
+      dispatch-path: "/internal/purchase-task/dispatch"
+      timeout-ms: 5000
+      stream-key: "ticket:purchase:stream:ready"
+      delayed-zset-key: "ticket:purchase:zset:delayed"
+      job-key-prefix: "ticket:purchase:job:"
+      heartbeat-key-prefix: "ticket:purchase:heartbeat:"
+      account-lock-key-prefix: "ticket:purchase:lock:account:"
+      job-ttl-seconds: 86400
+      heartbeat-timeout-seconds: 30
+      auto-warmup-lead-ms: 3000
+    mail-reader:
+      enabled: true
+      host: "mail.orderx.top"
+      port: 993
+      username: "orderx_admin"
+      password: "admin@orderx.top"
+      folder: "INBOX"
+      max-scan-count: 50
+      connect-timeout-ms: 30000
+      read-timeout-ms: 60000
+      ssl-trust-all: true
+      auto-sync-enabled: true
+      sync-fixed-delay-ms: 120000
+      sync-batch-size: 20
+      body-excerpt-length: 1000
+    stalwart:
+      enabled: true
+      base-url: "https://mail.orderx.top:9443"
+      api-key: "api_Zm9yYWRtaW46bEJ6R1U5Z2FuYzdINVRsbW1PMVlWVllIbDU3aGc2"
+      domain: "orderx.top"
+      connect-timeout-ms: 10000
+      read-timeout-ms: 30000
+      ssl-trust-all: true
+      max-create-attempt-factor: 5
 
 --- # warm-flow工作流配置
 warm-flow:

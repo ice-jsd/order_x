@@ -6,6 +6,7 @@ import org.dromara.ticket.domain.TicketManagedAccount;
 import org.dromara.ticket.domain.TicketPhoneNumber;
 import org.dromara.ticket.domain.TicketPlatformConfig;
 import org.dromara.ticket.domain.TicketSaleTask;
+import org.dromara.ticket.domain.vo.TicketPurchaseTemplateVo;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -84,8 +85,57 @@ public class MockTicketPlatformAdapter implements TicketPlatformAdapter {
     }
 
     @Override
+    public TicketPurchaseTemplateVo getPurchaseTemplate(TicketPlatformConfig platform, String purchaseType) {
+        Map<String, Object> template = new LinkedHashMap<>();
+        template.put("purchaseMode", TicketOrderFlowSupport.isLottery(purchaseType) ? "lottery-entry" : "mock-order");
+        template.put("paymentMode", "pending_manual");
+        template.put("deliveryOption", "standard");
+        template.put("pickupStoreCode", "store-shibuya");
+        template.put("mockBehavior", "");
+        return TicketOrderFlowSupport.buildTemplate(
+            platform,
+            purchaseType,
+            template,
+            List.of("purchaseMode", "paymentMode", "deliveryOption", "pickupStoreCode", "mockBehavior")
+        );
+    }
+
+    @Override
     public TicketOrderFlowDefinition buildOrderFlow(TicketPlatformConfig platform, TicketSaleTask saleTask, TicketManagedAccount account) {
-        return TicketOrderFlowSupport.buildDefaultFlow(platform, saleTask, account);
+        TicketOrderFlowDefinition definition = new TicketOrderFlowDefinition();
+        definition.setPurchaseType(TicketOrderFlowSupport.defaultPurchaseType(saleTask.getPurchaseType()));
+        definition.setConfigSchemaKey(saleTask.getConfigSchemaKey());
+
+        Map<String, Object> taskOptions = TicketOrderFlowSupport.parseTaskOptions(saleTask.getTaskOptions());
+        Map<String, Object> baseOptions = TicketOrderFlowSupport.baseOptions(platform, saleTask, account);
+        String paymentMode = TicketOrderFlowSupport.readString(taskOptions, "paymentMode");
+        String purchaseMode = TicketOrderFlowSupport.readString(taskOptions, "purchaseMode");
+
+        if ("lottery-entry".equals(purchaseMode)) {
+            definition.getSteps().add(TicketOrderFlowSupport.step("LOTTERY_REGISTER", "checking_out", "登记抽选", merge(baseOptions, taskOptions)));
+            return definition;
+        }
+
+        if ("cart_checkout".equals(purchaseMode)) {
+            definition.getSteps().add(TicketOrderFlowSupport.step("ADD_TO_CART", "carting", "加入购物车", merge(baseOptions, taskOptions)));
+        } else {
+            definition.getSteps().add(TicketOrderFlowSupport.step("DIRECT_BUY", "checking_out", "直接下单", merge(baseOptions, taskOptions)));
+        }
+
+        if ("pickup_store".equals(TicketOrderFlowSupport.readString(taskOptions, "fulfillmentMode"))) {
+            definition.getSteps().add(TicketOrderFlowSupport.step("SELECT_PICKUP_STORE", "selecting_fulfillment", "选择自提门店", taskOptions));
+        } else {
+            definition.getSteps().add(TicketOrderFlowSupport.step("SELECT_DELIVERY", "selecting_fulfillment", "选择配送方式", taskOptions));
+        }
+
+        definition.getSteps().add(TicketOrderFlowSupport.step("SELECT_PAYMENT_MODE", "selecting_payment", "选择支付方式", taskOptions));
+        definition.getSteps().add(TicketOrderFlowSupport.step("SUBMIT_ORDER", "creating_order", "提交订单", merge(baseOptions, taskOptions)));
+        if ("online".equals(paymentMode)) {
+            definition.getSteps().add(TicketOrderFlowSupport.step("CREATE_ONLINE_PAYMENT", "awaiting_payment", "创建线上支付", taskOptions));
+        } else if (!"cod_store".equals(paymentMode)) {
+            definition.getSteps().add(TicketOrderFlowSupport.step("CONFIRM_PENDING_PAYMENT", "awaiting_payment", "等待人工支付", taskOptions));
+        }
+        return definition;
     }
 
     @Override
@@ -93,22 +143,23 @@ public class MockTicketPlatformAdapter implements TicketPlatformAdapter {
         TicketOrderResult result = new TicketOrderResult();
         result.setSuccess(true);
         result.setCurrentStep(step.getCurrentStep());
+        String paymentMode = TicketOrderFlowSupport.readString(context.getTaskOptions(), "paymentMode");
         if ("SUBMIT_ORDER".equals(step.getStepType())) {
             result.setOrderNo(platform.getPlatformCode() + "-order-" + RandomUtil.randomNumbers(8));
             result.setExecutionStatus("submitted");
-            result.setPaymentStatus(TicketOrderFlowSupport.initialPaymentStatus(context.getSaleTask().getPaymentMode()));
+            result.setPaymentStatus(TicketOrderFlowSupport.initialPaymentStatus(context.getSaleTask().getPurchaseType(), context.getTaskOptions()));
             result.setMessage("mock submit order ok");
         } else if ("CREATE_ONLINE_PAYMENT".equals(step.getStepType())) {
             result.setExecutionStatus("pending_payment");
             result.setPaymentStatus("pending_online");
             result.setMessage("mock create online payment ok");
-        } else if ("CONFIRM_PENDING_PAYMENT".equals(step.getStepType())) {
+        } else if ("CONFIRM_PENDING_PAYMENT".equals(step.getStepType()) || "LOTTERY_REGISTER".equals(step.getStepType())) {
             result.setExecutionStatus("pending_payment");
-            result.setPaymentStatus("manual_pending");
-            result.setMessage("mock pending manual payment");
+            result.setPaymentStatus(TicketOrderFlowSupport.initialPaymentStatus(context.getSaleTask().getPurchaseType(), context.getTaskOptions()));
+            result.setMessage("mock pending payment");
         } else {
             result.setExecutionStatus("running");
-            result.setPaymentStatus(context.getPaymentStatus());
+            result.setPaymentStatus("online".equals(paymentMode) ? "pending_online" : context.getPaymentStatus());
             result.setMessage("mock step ok: " + step.getStepType());
         }
         result.setStepTrace(JSONUtil.toJsonStr(step.getOptions()));
@@ -121,8 +172,9 @@ public class MockTicketPlatformAdapter implements TicketPlatformAdapter {
         result.setSuccess(true);
         result.setOrderNo(context.getOrderNo());
         result.setCurrentStep("completed");
-        result.setPaymentStatus(context.getPaymentStatus());
-        result.setExecutionStatus("online".equals(context.getSaleTask().getPaymentMode()) ? "pending_payment" : "submitted");
+        String paymentMode = TicketOrderFlowSupport.readString(context.getTaskOptions(), "paymentMode");
+        result.setPaymentStatus(TicketOrderFlowSupport.initialPaymentStatus(context.getSaleTask().getPurchaseType(), context.getTaskOptions()));
+        result.setExecutionStatus("online".equals(paymentMode) ? "pending_payment" : "submitted");
         result.setMessage("mock order finalized");
         return result;
     }
@@ -139,5 +191,11 @@ public class MockTicketPlatformAdapter implements TicketPlatformAdapter {
     @Override
     public String normalizeError(String rawError) {
         return rawError == null ? "UNKNOWN" : rawError.toUpperCase();
+    }
+
+    private Map<String, Object> merge(Map<String, Object> left, Map<String, Object> right) {
+        Map<String, Object> merged = new LinkedHashMap<>(left);
+        merged.putAll(right);
+        return merged;
     }
 }

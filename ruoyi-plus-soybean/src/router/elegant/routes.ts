@@ -345,6 +345,15 @@ export const generatedRoutes: GeneratedRoute[] = [
         }
       },
       {
+        name: 'ticket_mailbox-account',
+        path: '/ticket/mailbox-account',
+        component: 'view.ticket_mailbox-account',
+        meta: {
+          title: 'ticket_mailbox-account',
+          i18nKey: 'route.ticket_mailbox-account'
+        }
+      },
+      {
         name: 'ticket_order-execution',
         path: '/ticket/order-execution',
         component: 'view.ticket_order-execution',

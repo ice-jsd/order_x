@@ -18,18 +18,6 @@ public class TicketPlatformConfigVo implements Serializable {
     private String tenantId;
     private String platformCode;
     private String platformName;
-    private String adapterType;
-    private String environment;
     private Boolean enabled;
-    private Boolean supportsBatchRegister;
-    private Boolean supportsBatchLogin;
-    private Boolean supportsSms;
-    private Boolean supportsEmail;
-    private Boolean supportsPhoneIdentity;
-    private String callbackUrl;
     private String orderSubmitUrl;
-    private String callbackSecretMask;
-    private String registrationTemplate;
-    private String loginStrategy;
-    private String remark;
 }

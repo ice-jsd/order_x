@@ -25,11 +25,8 @@ public class TicketMockPlatformOrder extends TenantEntity {
     private Long executionId;
     private Long taskId;
     private Long accountId;
-    private String flowType;
-    private String fulfillmentType;
-    private String paymentMode;
+    private String purchaseType;
     private String stepType;
-    private String productId;
     private Integer purchaseQuantity;
     private String pickupStoreCode;
     private String deliveryOption;

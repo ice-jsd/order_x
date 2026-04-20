@@ -24,11 +24,9 @@ public class TicketOrderExecution extends TenantEntity {
     private Long taskId;
     private Long platformId;
     private Long accountId;
-    private String productId;
+    private String purchaseType;
     private Integer purchaseQuantity;
-    private String flowType;
-    private String fulfillmentType;
-    private String paymentMode;
+    private String configSnapshot;
     private Long scheduleVersion;
     private String currentStep;
     private String stepStatus;

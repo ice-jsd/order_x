@@ -9,8 +9,7 @@ import java.util.List;
 @Data
 public class TicketOrderFlowDefinition implements Serializable {
 
-    private String flowType;
-    private String fulfillmentType;
-    private String paymentMode;
+    private String purchaseType;
+    private String configSchemaKey;
     private List<TicketOrderFlowStep> steps = new ArrayList<>();
 }

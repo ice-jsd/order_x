@@ -37,12 +37,11 @@ public class TicketMockPlatformService {
         Map<String, Object> stepOptions = getMap(step.get("options"));
         Map<String, Object> taskOptions = getMap(payload.get("taskOptions"));
         String stepType = getString(step.get("stepType"), "SUBMIT_ORDER");
-        String flowType = getString(payload.get("orderFlowType"), TicketOrderFlowSupport.defaultFlowType(null));
-        String fulfillmentType = getString(payload.get("fulfillmentType"), TicketOrderFlowSupport.defaultFulfillmentType(null));
-        String paymentMode = getString(payload.get("paymentMode"), TicketOrderFlowSupport.defaultPaymentMode(null));
+        String purchaseType = getString(payload.get("purchaseType"), TicketOrderFlowSupport.defaultPurchaseType(null));
+        String paymentMode = getString(taskOptions.get("paymentMode"), "pending_manual");
         String mockBehavior = getString(taskOptions.get("mockBehavior"), "");
 
-        Map<String, Object> response = buildResponse(platformCode, payload, stepType, stepOptions, taskOptions, flowType, fulfillmentType, paymentMode, mockBehavior);
+        Map<String, Object> response = buildResponse(platformCode, payload, stepType, stepOptions, taskOptions, purchaseType, paymentMode, mockBehavior);
 
         TicketMockPlatformOrder record = new TicketMockPlatformOrder();
         record.setMockOrderId(IdGeneratorUtil.nextLongId());
@@ -51,11 +50,8 @@ public class TicketMockPlatformService {
         record.setExecutionId(Convert.toLong(payload.get("executionId"), null));
         record.setTaskId(Convert.toLong(payload.get("taskId"), null));
         record.setAccountId(Convert.toLong(payload.get("accountId"), null));
-        record.setFlowType(flowType);
-        record.setFulfillmentType(fulfillmentType);
-        record.setPaymentMode(paymentMode);
+        record.setPurchaseType(purchaseType);
         record.setStepType(stepType);
-        record.setProductId(getString(payload.get("productId"), null));
         record.setPurchaseQuantity(Convert.toInt(payload.get("purchaseQuantity"), null));
         record.setPickupStoreCode(getString(taskOptions.get("pickupStoreCode"), getString(stepOptions.get("pickupStoreCode"), null)));
         record.setDeliveryOption(getString(taskOptions.get("deliveryOption"), getString(stepOptions.get("deliveryOption"), null)));
@@ -80,8 +76,7 @@ public class TicketMockPlatformService {
         String stepType,
         Map<String, Object> stepOptions,
         Map<String, Object> taskOptions,
-        String flowType,
-        String fulfillmentType,
+        String purchaseType,
         String paymentMode,
         String mockBehavior
     ) {
@@ -93,8 +88,7 @@ public class TicketMockPlatformService {
         Map<String, Object> mockData = new LinkedHashMap<>();
         mockData.put("platformCode", platformCode);
         mockData.put("stepType", stepType);
-        mockData.put("flowType", flowType);
-        mockData.put("fulfillmentType", fulfillmentType);
+        mockData.put("purchaseType", purchaseType);
         mockData.put("paymentMode", paymentMode);
         if (taskOptions.containsKey("pickupStoreCode")) {
             mockData.put("pickupStoreCode", taskOptions.get("pickupStoreCode"));
@@ -110,7 +104,7 @@ public class TicketMockPlatformService {
             response.put("success", false);
             response.put("status", "timeout");
             response.put("message", "mock timeout triggered");
-            response.put("paymentStatus", TicketOrderFlowSupport.initialPaymentStatus(paymentMode));
+            response.put("paymentStatus", TicketOrderFlowSupport.initialPaymentStatus(purchaseType, taskOptions));
             response.put("mockData", mockData);
             return response;
         }
@@ -135,7 +129,7 @@ public class TicketMockPlatformService {
             case "SELECT_PAYMENT_MODE" -> {
                 response.put("status", "payment_mode_selected");
                 response.put("message", "已选择支付方式");
-                response.put("paymentStatus", TicketOrderFlowSupport.initialPaymentStatus(paymentMode));
+                response.put("paymentStatus", TicketOrderFlowSupport.initialPaymentStatus(purchaseType, taskOptions));
             }
             case "SUBMIT_ORDER" -> {
                 if ("fail_submit".equalsIgnoreCase(mockBehavior)) {
@@ -146,7 +140,7 @@ public class TicketMockPlatformService {
                     response.put("status", "submitted");
                     response.put("message", "mock order submitted");
                     response.put("orderNo", buildMockOrderNo(platformCode));
-                    response.put("paymentStatus", TicketOrderFlowSupport.initialPaymentStatus(paymentMode));
+                    response.put("paymentStatus", TicketOrderFlowSupport.initialPaymentStatus(purchaseType, taskOptions));
                 }
             }
             case "CREATE_ONLINE_PAYMENT" -> {
@@ -165,7 +159,7 @@ public class TicketMockPlatformService {
                 response.put("status", "pending_payment");
                 response.put("message", "订单已提交，等待后续支付");
                 response.put("orderNo", getString(payload.get("orderNo"), null));
-                response.put("paymentStatus", TicketOrderFlowSupport.initialPaymentStatus(paymentMode));
+                response.put("paymentStatus", TicketOrderFlowSupport.initialPaymentStatus(purchaseType, taskOptions));
             }
             default -> {
                 response.put("status", "running");

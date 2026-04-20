@@ -18,12 +18,10 @@ public class TicketSaleTaskBo extends BaseEntity {
 
     private Long taskId;
     private Long platformId;
-    private String productId;
     private String taskName;
     private String taskStatus;
-    private String orderFlowType;
-    private String fulfillmentType;
-    private String paymentMode;
+    private String purchaseType;
+    private String configSchemaKey;
     private Date warmupTime;
     private Date scheduledTime;
     private Integer purchaseQuantity;

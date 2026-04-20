@@ -22,18 +22,8 @@ interface PlatformFormModel {
   platformId?: CommonType.IdType;
   platformCode: string;
   platformName: string;
-  adapterType: string;
-  environment: string;
   enabled: boolean;
-  supportsSms: boolean;
-  supportsEmail: boolean;
-  supportsPhoneIdentity: boolean;
-  callbackUrl: string;
   orderSubmitUrl: string;
-  callbackSecretMask: string;
-  registrationTemplate: string;
-  loginStrategy: string;
-  remark: string;
 }
 
 function createSearchParams(): Api.Ticket.PlatformSearchParams {
@@ -52,18 +42,8 @@ function createFormModel(): PlatformFormModel {
     platformId: undefined,
     platformCode: '',
     platformName: '',
-    adapterType: 'mock',
-    environment: 'sandbox',
     enabled: true,
-    supportsSms: false,
-    supportsEmail: true,
-    supportsPhoneIdentity: true,
-    callbackUrl: '',
     orderSubmitUrl: '',
-    callbackSecretMask: '',
-    registrationTemplate: '',
-    loginStrategy: '',
-    remark: ''
   };
 }
 
@@ -102,38 +82,7 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
       { type: 'selection', align: 'center', width: 48 },
       { key: 'platformCode', title: '平台编码', align: 'center', width: 140 },
       { key: 'platformName', title: '平台名称', align: 'center', minWidth: 180 },
-      { key: 'adapterType', title: '适配器', align: 'center', width: 100 },
-      { key: 'environment', title: '环境', align: 'center', width: 100 },
-      {
-        key: 'capabilities',
-        title: '能力开关',
-        align: 'center',
-        minWidth: 260,
-        render: row =>
-          renderTicketEllipsis(
-            [
-              row.supportsSms ? '短信' : null,
-              row.supportsEmail ? '邮箱' : null,
-              row.supportsPhoneIdentity ? '号码身份' : null
-            ]
-              .filter(Boolean)
-              .join(' / ')
-          )
-      },
-      {
-        key: 'callbackUrl',
-        title: '回调地址',
-        align: 'center',
-        minWidth: 220,
-        render: row => renderTicketEllipsis(row.callbackUrl)
-      },
-      {
-        key: 'remark',
-        title: '备注',
-        align: 'center',
-        minWidth: 180,
-        render: row => renderTicketEllipsis(row.remark)
-      },
+      { key: 'orderSubmitUrl', title: '下单接口地址', align: 'center', minWidth: 260, render: row => renderTicketEllipsis(row.orderSubmitUrl) },
       {
         key: 'operate',
         title: '操作',
@@ -194,18 +143,8 @@ function handleEdit(row: Api.Ticket.Platform) {
     platformId: row.platformId,
     platformCode: row.platformCode,
     platformName: row.platformName,
-    adapterType: row.adapterType,
-    environment: row.environment,
     enabled: row.enabled,
-    supportsSms: row.supportsSms,
-    supportsEmail: row.supportsEmail,
-    supportsPhoneIdentity: row.supportsPhoneIdentity,
-    callbackUrl: row.callbackUrl,
     orderSubmitUrl: row.orderSubmitUrl,
-    callbackSecretMask: row.callbackSecretMask,
-    registrationTemplate: row.registrationTemplate,
-    loginStrategy: row.loginStrategy,
-    remark: row.remark || ''
   };
   modalVisible.value = true;
 }
@@ -237,18 +176,8 @@ async function handleTogglePlatformEnabled(row: Api.Ticket.Platform, enabled: bo
         platformId: row.platformId,
         platformCode: row.platformCode,
         platformName: row.platformName,
-        adapterType: row.adapterType,
-        environment: row.environment,
         enabled,
-        supportsSms: row.supportsSms,
-        supportsEmail: row.supportsEmail,
-        supportsPhoneIdentity: row.supportsPhoneIdentity,
-        callbackUrl: row.callbackUrl,
-        orderSubmitUrl: row.orderSubmitUrl,
-        callbackSecretMask: row.callbackSecretMask,
-        registrationTemplate: row.registrationTemplate,
-        loginStrategy: row.loginStrategy,
-        remark: row.remark || ''
+        orderSubmitUrl: row.orderSubmitUrl
       };
       const { error } = await fetchUpdateTicketPlatform(payload);
       statusLoadingMap[rowKey] = false;
@@ -326,37 +255,13 @@ async function handleTogglePlatformEnabled(row: Api.Ticket.Platform, enabled: bo
           <NFormItemGi :span="12" label="平台名称">
             <NInput v-model:value="formModel.platformName" placeholder="请输入平台名称" />
           </NFormItemGi>
-          <NFormItemGi :span="12" label="适配器类型">
-            <NInput v-model:value="formModel.adapterType" placeholder="mock" />
-          </NFormItemGi>
-          <NFormItemGi :span="12" label="运行环境">
-            <NInput v-model:value="formModel.environment" placeholder="sandbox / prod" />
-          </NFormItemGi>
-          <NFormItemGi :span="24" label="能力开关">
+          <NFormItemGi :span="24" label="启用状态">
             <NSpace>
               <NCheckbox v-model:checked="formModel.enabled">启用平台</NCheckbox>
-              <NCheckbox v-model:checked="formModel.supportsSms">短信验证</NCheckbox>
-              <NCheckbox v-model:checked="formModel.supportsEmail">邮箱验证</NCheckbox>
-              <NCheckbox v-model:checked="formModel.supportsPhoneIdentity">号码身份</NCheckbox>
             </NSpace>
-          </NFormItemGi>
-          <NFormItemGi :span="24" label="回调地址">
-            <NInput v-model:value="formModel.callbackUrl" placeholder="https://example.com/ticket/callback" />
           </NFormItemGi>
           <NFormItemGi :span="24" label="下单接口地址">
             <NInput v-model:value="formModel.orderSubmitUrl" placeholder="https://example.com/api/order/submit" />
-          </NFormItemGi>
-          <NFormItemGi :span="24" label="回调密钥摘要">
-            <NInput v-model:value="formModel.callbackSecretMask" placeholder="用于页面展示的摘要值" />
-          </NFormItemGi>
-          <NFormItemGi :span="12" label="注册模板">
-            <NInput v-model:value="formModel.registrationTemplate" type="textarea" :rows="4" />
-          </NFormItemGi>
-          <NFormItemGi :span="12" label="登录策略">
-            <NInput v-model:value="formModel.loginStrategy" type="textarea" :rows="4" />
-          </NFormItemGi>
-          <NFormItemGi :span="24" label="备注">
-            <NInput v-model:value="formModel.remark" type="textarea" :rows="3" />
           </NFormItemGi>
         </NGrid>
       </NForm>

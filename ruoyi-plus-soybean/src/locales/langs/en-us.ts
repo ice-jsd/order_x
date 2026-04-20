@@ -306,9 +306,10 @@ const local: App.I18n.Schema = {
     ticket_platform: 'Platforms',
     ticket_phone: 'Phone Pool',
     ticket_account: 'Account Pool',
+    'ticket_mailbox-account': 'Mailbox Pool',
     ticket_event: 'Events',
-'ticket_sale-task': 'Purchase Tasks',
-'ticket_order-execution': 'Order Executions',
+    'ticket_sale-task': 'Purchase Tasks',
+    'ticket_order-execution': 'Order Executions',
     'ticket_audit-log': 'Audit Center',
     about: 'About'
   },

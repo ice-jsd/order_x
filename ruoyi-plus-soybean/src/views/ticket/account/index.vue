@@ -1,8 +1,15 @@
 <script setup lang="tsx">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { NButton } from 'naive-ui';
 import { useAuth } from '@/hooks/business/auth';
 import { defaultTransform, useNaivePaginatedTable } from '@/hooks/common/table';
-import { fetchCreateTicketAccount, fetchGetTicketAccountList, fetchGetTicketBindablePhoneList, fetchGetTicketPlatformList } from '@/service/api/ticket';
+import {
+  fetchCreateTicketAccount,
+  fetchGetTicketAccountList,
+  fetchGetTicketBindablePhoneList,
+  fetchGetTicketPlatformList,
+  fetchUpdateTicketAccount
+} from '@/service/api/ticket';
 import { useAppStore } from '@/store/modules/app';
 import {
   accountStatusOptions,
@@ -21,11 +28,15 @@ const appStore = useAppStore();
 const { hasAuth } = useAuth();
 
 interface AccountFormModel {
+  accountId?: CommonType.IdType;
   platformId: CommonType.IdType | null;
   phoneId: CommonType.IdType | null;
   email: string;
   accountInfo: string;
   reqData: string;
+  accountStatus: string;
+  loginStatus: string;
+  lastError: string;
 }
 
 interface PhoneOption {
@@ -49,11 +60,15 @@ function createSearchParams(): Api.Ticket.AccountSearchParams {
 
 function createFormModel(): AccountFormModel {
   return {
+    accountId: undefined,
     platformId: null,
     phoneId: null,
     email: '',
     accountInfo: '',
-    reqData: ''
+    reqData: '',
+    accountStatus: 'registered',
+    loginStatus: 'offline',
+    lastError: ''
   };
 }
 
@@ -61,6 +76,7 @@ const searchParams = ref<Api.Ticket.AccountSearchParams>(createSearchParams());
 const checkedRowKeys = ref<CommonType.IdType[]>([]);
 const platformOptions = ref<{ label: string; value: CommonType.IdType }[]>([]);
 const modalVisible = ref(false);
+const operateType = ref<NaiveUI.TableOperateType>('add');
 const saving = ref(false);
 const phoneOptionsLoading = ref(false);
 const bindablePhoneOptions = ref<PhoneOption[]>([]);
@@ -128,9 +144,27 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
         align: 'center',
         minWidth: 220,
         render: row => renderTicketEllipsis(row.lastError)
+      },
+      {
+        key: 'operate',
+        title: '操作',
+        align: 'center',
+        fixed: 'right',
+        width: 90,
+        render: row => (
+          <div class="flex-center gap-8px">
+            {hasAuth('ticket:account:edit') && (
+              <NButton text type="primary" onClick={() => handleEdit(row)}>
+                编辑
+              </NButton>
+            )}
+          </div>
+        )
       }
     ]
   });
+
+const modalTitle = computed(() => (operateType.value === 'add' ? '新增账号' : '编辑账号'));
 
 async function loadPlatformOptions() {
   const { data: list, error } = await fetchGetTicketPlatformList({ pageNum: 1, pageSize: 200, params: {} });
@@ -168,9 +202,30 @@ async function loadBindablePhoneOptions(keyword = '') {
 }
 
 function openAdd() {
+  operateType.value = 'add';
   formModel.value = createFormModel();
   phoneSearchKeyword.value = '';
   bindablePhoneOptions.value = [];
+  modalVisible.value = true;
+}
+
+function handleEdit(row: Api.Ticket.Account) {
+  operateType.value = 'edit';
+  formModel.value = {
+    accountId: row.accountId,
+    platformId: row.platformId,
+    phoneId: row.phoneId,
+    email: row.email || '',
+    accountInfo: row.accountInfo || '',
+    reqData: row.reqData || '',
+    accountStatus: row.accountStatus || 'registered',
+    loginStatus: row.loginStatus || 'offline',
+    lastError: row.lastError || ''
+  };
+  phoneSearchKeyword.value = '';
+  bindablePhoneOptions.value = row.phoneId
+    ? [{ label: `${row.phoneNumber || row.phoneId}`, value: row.phoneId }]
+    : [];
   modalVisible.value = true;
 }
 
@@ -210,6 +265,10 @@ async function handleSubmit() {
     window.$message?.warning('请选择来源号码');
     return;
   }
+  if (operateType.value === 'edit' && !formModel.value.accountId) {
+    window.$message?.warning('缺少账号ID');
+    return;
+  }
   if (!formModel.value.email.trim()) {
     window.$message?.warning('请输入邮箱');
     return;
@@ -219,23 +278,27 @@ async function handleSubmit() {
   }
 
   saving.value = true;
-  const { error } = await fetchCreateTicketAccount({
+  const requestFn = operateType.value === 'add' ? fetchCreateTicketAccount : fetchUpdateTicketAccount;
+  const { error } = await requestFn({
+    accountId: formModel.value.accountId || null,
     platformId: formModel.value.platformId,
     phoneId: formModel.value.phoneId,
     email: formModel.value.email.trim(),
     accountInfo: formModel.value.accountInfo.trim(),
-    reqData: formModel.value.reqData.trim()
+    reqData: formModel.value.reqData.trim(),
+    accountStatus: formModel.value.accountStatus,
+    loginStatus: formModel.value.loginStatus,
+    lastError: formModel.value.lastError.trim()
   });
   saving.value = false;
   if (error) {
     return;
   }
 
-  window.$message?.success('账号已创建');
+  window.$message?.success(operateType.value === 'add' ? '账号已创建' : '账号已更新');
   modalVisible.value = false;
   await getData();
 }
-
 function resetSearch() {
   searchParams.value = createSearchParams();
   checkedRowKeys.value = [];
@@ -247,6 +310,7 @@ watch(
   visible => {
     if (!visible) {
       formModel.value = createFormModel();
+      operateType.value = 'add';
       bindablePhoneOptions.value = [];
       phoneSearchKeyword.value = '';
     }
@@ -337,9 +401,12 @@ onMounted(() => {
       />
     </NCard>
 
-    <NModal v-model:show="modalVisible" preset="card" title="新增账号" class="w-720px">
-      <NAlert type="info" :show-icon="false" class="mb-16px">
+    <NModal v-model:show="modalVisible" preset="card" :title="modalTitle" class="w-760px">
+      <NAlert v-if="operateType === 'add'" type="info" :show-icon="false" class="mb-16px">
         新增后默认状态为“已注册、离线”，后续可通过外部登录上报接口更新为已登录。
+      </NAlert>
+      <NAlert v-else type="warning" :show-icon="false" class="mb-16px">
+        编辑账号不会变更目标平台和来源号码；如果手动改为“已登录”，系统会同步更新最近登录时间和号码平台关系状态。
       </NAlert>
       <NForm label-placement="top" :model="formModel">
         <NGrid :cols="24" :x-gap="16">
@@ -348,6 +415,7 @@ onMounted(() => {
               v-model:value="formModel.platformId"
               filterable
               clearable
+              :disabled="operateType === 'edit'"
               :options="platformOptions"
               placeholder="请选择平台"
               @update:value="handlePlatformChange"
@@ -360,7 +428,7 @@ onMounted(() => {
               remote
               clearable
               :loading="phoneOptionsLoading"
-              :disabled="!formModel.platformId"
+              :disabled="!formModel.platformId || operateType === 'edit'"
               :options="bindablePhoneOptions"
               placeholder="请先选择平台，再搜索号码"
               @focus="loadBindablePhoneOptions(phoneSearchKeyword)"
@@ -369,6 +437,20 @@ onMounted(() => {
           </NFormItemGi>
           <NFormItemGi :span="24" label="邮箱">
             <NInput v-model:value="formModel.email" placeholder="请输入邮箱" />
+          </NFormItemGi>
+          <NFormItemGi v-if="operateType === 'edit'" :span="12" label="账号状态">
+            <NSelect
+              v-model:value="formModel.accountStatus"
+              :options="accountStatusOptions"
+              placeholder="请选择账号状态"
+            />
+          </NFormItemGi>
+          <NFormItemGi v-if="operateType === 'edit'" :span="12" label="登录状态">
+            <NSelect
+              v-model:value="formModel.loginStatus"
+              :options="loginStatusOptions"
+              placeholder="请选择登录状态"
+            />
           </NFormItemGi>
           <NFormItemGi :span="24" label="账号信息">
             <NInput
@@ -384,6 +466,14 @@ onMounted(() => {
               type="textarea"
               :rows="4"
               placeholder='可选，填写 JSON，例如 {"channel":"email"}'
+            />
+          </NFormItemGi>
+          <NFormItemGi v-if="operateType === 'edit'" :span="24" label="最近错误">
+            <NInput
+              v-model:value="formModel.lastError"
+              type="textarea"
+              :rows="3"
+              placeholder="可选，留空则清除最近错误"
             />
           </NFormItemGi>
         </NGrid>

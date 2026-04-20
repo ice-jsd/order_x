@@ -116,11 +116,15 @@ public class TicketOrderExecutorClient {
     }
 
     private long resolveDispatchEpochMillis(TicketOrderDispatchRequest payload) {
-        if (payload.getWarmupTime() != null && payload.getWarmupTime().getTime() > System.currentTimeMillis()) {
-            return payload.getWarmupTime().getTime();
+        long now = System.currentTimeMillis();
+        Long scheduledAt = payload.getScheduledTime() == null ? null : payload.getScheduledTime().getTime();
+        Long warmupAt = payload.getWarmupTime() == null ? null : payload.getWarmupTime().getTime();
+        if (warmupAt != null && warmupAt > now && (scheduledAt == null || warmupAt < scheduledAt)) {
+            return warmupAt;
         }
-        if (payload.getScheduledTime() != null && payload.getScheduledTime().getTime() > System.currentTimeMillis()) {
-            return payload.getScheduledTime().getTime();
+        if (scheduledAt != null && scheduledAt > now) {
+            long leadMs = Math.max(properties.getAutoWarmupLeadMs(), 0L);
+            return Math.max(now, scheduledAt - leadMs);
         }
         return 0L;
     }

@@ -14,6 +14,8 @@ public interface ITicketOpsService {
 
     TicketPlatformConfigVo selectPlatformById(Long platformId);
 
+    TicketPurchaseTemplateVo getPurchaseTemplate(Long platformId, String purchaseType);
+
     int savePlatform(TicketPlatformConfigBo bo);
 
     int updatePlatform(TicketPlatformConfigBo bo);
@@ -37,6 +39,8 @@ public interface ITicketOpsService {
     TableDataInfo<TicketPhoneNumberVo> selectBindablePhonePage(Long platformId, TicketPhoneNumberBo bo, PageQuery pageQuery);
 
     int createManagedAccount(TicketManagedAccountCreateBo bo);
+
+    int updateManagedAccount(TicketManagedAccountUpdateBo bo);
 
     TableDataInfo<TicketManagedAccountVo> selectLoginableAccountPage(Long platformId, TicketManagedAccountBo bo, PageQuery pageQuery);
 
@@ -87,4 +91,6 @@ public interface ITicketOpsService {
     R<Void> reportExternalLoginSuccess(TicketExternalLoginReportBo bo);
 
     R<TicketExternalOfflineAccountVo> fetchNextOfflineAccount(String platformCode);
+
+    R<TicketExternalVerifyCodeVo> verifyCode(String platformCode, String email);
 }

@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.dromara.common.core.domain.R;
 import org.dromara.ticket.domain.bo.TicketExternalLoginReportBo;
 import org.dromara.ticket.domain.vo.TicketExternalOfflineAccountVo;
+import org.dromara.ticket.domain.vo.TicketExternalVerifyCodeVo;
 import org.dromara.ticket.service.ITicketOpsService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,5 +34,11 @@ public class TicketExternalAccountController {
     public R<TicketExternalOfflineAccountVo> fetchNextOfflineAccount(
         @RequestParam @NotBlank(message = "platformCode不能为空") String platformCode) {
         return ticketOpsService.fetchNextOfflineAccount(platformCode);
+    }
+
+    @GetMapping("/verifyCode")
+    public R<TicketExternalVerifyCodeVo> verifyCode(
+        @RequestParam @NotBlank(message = "platformCode不能为空") String platformCode,  @RequestParam @NotBlank(message = "email不能为空") String email) {
+        return ticketOpsService.verifyCode(platformCode, email);
     }
 }
