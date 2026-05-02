@@ -25,7 +25,6 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.Enumeration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
@@ -42,50 +41,25 @@ public class TicketMailReaderService {
         Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern ANY_CODE_PATTERN = Pattern.compile("(?<!\\d)([0-9]{4,8})(?!\\d)");
     private static final Pattern URL_PATTERN = Pattern.compile("https?://[^\\s\"'<>]+", Pattern.CASE_INSENSITIVE);
-    private static final Pattern RECEIVED_FOR_PATTERN = Pattern.compile("for\\s+<?([^\\s<>;]+@[^\\s<>;]+)>?", Pattern.CASE_INSENSITIVE);
+    private static final String PARSE_TYPE_ACTIVATION_URL = "activation_url";
+    private static final String PARSE_TYPE_VERIFY_CODE = "verify_code";
+    private static final String PARSE_TYPE_UNKNOWN = "unknown";
 
     private final TicketMailReaderProperties properties;
 
-    public MailReadResult readLatestForEmail(String email) {
-        if (!properties.isEnabled()) {
-            throw new ServiceException("邮箱读取功能未启用");
-        }
-        if (StringUtils.isBlank(properties.getHost()) || StringUtils.isBlank(properties.getUsername())
-            || StringUtils.isBlank(properties.getPassword())) {
-            throw new ServiceException("邮箱读取配置不完整");
-        }
-
-        Store store = null;
-        Folder inbox = null;
-        try {
-            Session session = Session.getInstance(buildMailProperties());
-            store = session.getStore("imaps");
-            store.connect(properties.getHost(), properties.getUsername(), properties.getPassword());
-            inbox = store.getFolder(StringUtils.blankToDefault(properties.getFolder(), "INBOX"));
-            inbox.open(Folder.READ_ONLY);
-
-            int count = inbox.getMessageCount();
-            int start = Math.max(1, count - Math.max(1, properties.getMaxScanCount()) + 1);
-            for (int index = count; index >= start; index--) {
-                Message message = inbox.getMessage(index);
-                if (!matchesRecipient(message, email)) {
-                    continue;
-                }
-                return parseMatchedMessage(message);
-            }
-            throw new ServiceException("没有找到收件人为 " + email + " 的最新邮件");
-        } catch (ServiceException e) {
-            throw e;
-        } catch (Exception e) {
-            log.warn("read latest mail failed for email={}", email, e);
-            throw new ServiceException("读取邮箱失败: " + e.getMessage());
-        } finally {
-            closeQuietly(inbox);
-            closeQuietly(store);
-        }
+    public MailReadResult readLatestForMailbox(String username, String password) {
+        return readLatestForMailbox(username, password, null, "邮箱没有邮件");
     }
 
-    public MailReadResult readLatestForMailbox(String username, String password) {
+    public MailReadResult readLatestVerifyCodeForMailbox(String username, String password) {
+        return readLatestForMailbox(username, password, PARSE_TYPE_VERIFY_CODE, "邮箱没有验证码邮件");
+    }
+
+    public MailReadResult readLatestActivationUrlForMailbox(String username, String password) {
+        return readLatestForMailbox(username, password, PARSE_TYPE_ACTIVATION_URL, "邮箱没有激活链接邮件");
+    }
+
+    private MailReadResult readLatestForMailbox(String username, String password, String expectedParseType, String notFoundMessage) {
         if (!properties.isEnabled()) {
             throw new ServiceException("邮箱读取功能未启用");
         }
@@ -95,26 +69,26 @@ public class TicketMailReaderService {
         }
 
         Store store = null;
-        Folder inbox = null;
         try {
             Session session = Session.getInstance(buildMailProperties());
             store = session.getStore("imaps");
             store.connect(properties.getHost(), username, password);
-            inbox = store.getFolder(StringUtils.blankToDefault(properties.getFolder(), "INBOX"));
-            inbox.open(Folder.READ_ONLY);
 
-            int count = inbox.getMessageCount();
-            if (count <= 0) {
-                throw new ServiceException("邮箱没有邮件");
+            MailReadResult latestResult = null;
+            for (String folderName : resolveFolderNames(store)) {
+                MailReadResult folderResult = readLatestFromFolder(store, folderName, expectedParseType);
+                latestResult = pickLatest(latestResult, folderResult);
             }
-            return parseMatchedMessage(inbox.getMessage(count));
+            if (latestResult != null) {
+                return latestResult;
+            }
+            throw new ServiceException(notFoundMessage);
         } catch (ServiceException e) {
             throw e;
         } catch (Exception e) {
             log.warn("read latest mail failed for mailbox={}", username, e);
             throw new ServiceException("读取邮箱失败: " + e.getMessage());
         } finally {
-            closeQuietly(inbox);
             closeQuietly(store);
         }
     }
@@ -132,26 +106,130 @@ public class TicketMailReaderService {
         return props;
     }
 
+    private List<String> resolveFolderNames(Store store) {
+        List<String> configured = properties.getFolders();
+        if (configured == null || configured.isEmpty()) {
+            configured = List.of(StringUtils.blankToDefault(properties.getFolder(), "INBOX"));
+        }
+        List<String> folderNames = new ArrayList<>(configured.stream()
+            .filter(StringUtils::isNotBlank)
+            .map(String::trim)
+            .distinct()
+            .toList());
+
+        if (properties.isScanAllFolders()) {
+            collectStoreFolderNames(store, folderNames);
+        }
+
+        return folderNames.stream().filter(StringUtils::isNotBlank).distinct().toList();
+    }
+
+    private void collectStoreFolderNames(Store store, List<String> folderNames) {
+        try {
+            for (Folder folder : store.getDefaultFolder().list("*")) {
+                collectFolderNameRecursive(folder, folderNames);
+            }
+        } catch (Exception e) {
+            log.warn("list mail folders failed, fallback to configured folders", e);
+        }
+    }
+
+    private void collectFolderNameRecursive(Folder folder, List<String> folderNames) throws MessagingException {
+        if (folder == null) {
+            return;
+        }
+        folderNames.add(folder.getFullName());
+        if ((folder.getType() & Folder.HOLDS_FOLDERS) != 0) {
+            for (Folder child : folder.list()) {
+                collectFolderNameRecursive(child, folderNames);
+            }
+        }
+    }
+
+    private MailReadResult readLatestFromFolder(Store store, String folderName, String expectedParseType) throws Exception {
+        Folder folder = null;
+        try {
+            folder = store.getFolder(folderName);
+            if (folder == null || !folder.exists()) {
+                log.debug("mail folder does not exist, folder={}", folderName);
+                return null;
+            }
+            folder.open(Folder.READ_ONLY);
+
+            int count = folder.getMessageCount();
+            if (count <= 0) {
+                return null;
+            }
+            int start = Math.max(1, count - Math.max(1, properties.getMaxScanCount()) + 1);
+            for (int index = count; index >= start; index--) {
+                MailReadResult result = parseMatchedMessage(folder.getMessage(index), folderName);
+                if (StringUtils.isBlank(expectedParseType) || expectedParseType.equals(result.getParseType())) {
+                    return result;
+                }
+            }
+            return null;
+        } catch (MessagingException e) {
+            log.warn("read mail folder failed, folder={}", folderName, e);
+            return null;
+        } finally {
+            closeQuietly(folder);
+        }
+    }
+
+    private MailReadResult pickLatest(MailReadResult current, MailReadResult candidate) {
+        if (candidate == null) {
+            return current;
+        }
+        if (current == null) {
+            return candidate;
+        }
+        Date currentDate = current.getReceivedAt();
+        Date candidateDate = candidate.getReceivedAt();
+        if (candidateDate == null) {
+            return current;
+        }
+        if (currentDate == null || candidateDate.after(currentDate)) {
+            return candidate;
+        }
+        return current;
+    }
+
     private MailReadResult parseMatchedMessage(Message message) throws Exception {
+        return parseMatchedMessage(message, null);
+    }
+
+    private MailReadResult parseMatchedMessage(Message message, String folderName) throws Exception {
         String subject = decodeText(message.getSubject());
         String body = extractBody(message);
-        String verifyCode = extractVerifyCode(body);
         String activationUrl = extractActivationUrl(body);
+        String verifyCode = StringUtils.isBlank(activationUrl) ? extractVerifyCode(body) : null;
 
         MailReadResult result = new MailReadResult();
         result.setSubject(subject);
         result.setFromAddress(extractFromAddress(message));
         result.setReceivedAt(message.getReceivedDate());
         result.setMessageId(firstHeader(message, "Message-ID"));
+        result.setFolderName(folderName);
         result.setBodyExcerpt(buildBodyExcerpt(body));
-        result.setVerifyCode(verifyCode);
-        result.setActivationUrl(activationUrl);
-        if (StringUtils.isBlank(verifyCode) && StringUtils.isBlank(activationUrl)) {
-            result.setParsed(false);
-            result.setMessage("未解析到验证码或激活链接");
-        } else {
+
+        if (StringUtils.isNotBlank(activationUrl)) {
             result.setParsed(true);
-            result.setMessage("解析成功");
+            result.setParseType(PARSE_TYPE_ACTIVATION_URL);
+            result.setActivationUrl(activationUrl);
+            result.setVerifyCode(null);
+            result.setMessage("解析到激活链接");
+        } else if (StringUtils.isNotBlank(verifyCode)) {
+            result.setParsed(true);
+            result.setParseType(PARSE_TYPE_VERIFY_CODE);
+            result.setVerifyCode(verifyCode);
+            result.setActivationUrl(null);
+            result.setMessage("解析到验证码");
+        } else {
+            result.setParsed(false);
+            result.setParseType(PARSE_TYPE_UNKNOWN);
+            result.setVerifyCode(null);
+            result.setActivationUrl(null);
+            result.setMessage("未解析到验证码或激活链接");
         }
         return result;
     }
@@ -166,59 +244,6 @@ public class TicketMailReaderService {
             return decodeText(internetAddress.toUnicodeString());
         }
         return decodeText(first.toString());
-    }
-
-    private boolean matchesRecipient(Message message, String email) throws MessagingException {
-        String target = normalize(email);
-        if (StringUtils.isBlank(target)) {
-            return false;
-        }
-
-        List<String> candidates = new ArrayList<>();
-        collectAddresses(candidates, message.getRecipients(Message.RecipientType.TO));
-        collectAddresses(candidates, message.getRecipients(Message.RecipientType.CC));
-        collectHeaders(candidates, message, "Delivered-To");
-        collectHeaders(candidates, message, "X-Original-To");
-        collectHeaders(candidates, message, "Envelope-To");
-        collectHeaders(candidates, message, "To");
-        collectHeaders(candidates, message, "Cc");
-        collectReceivedFor(candidates, message);
-
-        return candidates.stream().map(this::normalize).anyMatch(value -> value.contains(target));
-    }
-
-    private void collectAddresses(List<String> candidates, Address[] addresses) {
-        if (addresses == null) {
-            return;
-        }
-        for (Address address : addresses) {
-            if (address instanceof InternetAddress internetAddress) {
-                candidates.add(internetAddress.getAddress());
-            } else if (address != null) {
-                candidates.add(address.toString());
-            }
-        }
-    }
-
-    private void collectHeaders(List<String> candidates, Message message, String headerName) throws MessagingException {
-        String[] values = message.getHeader(headerName);
-        if (values == null) {
-            return;
-        }
-        candidates.addAll(List.of(values));
-    }
-
-    private void collectReceivedFor(List<String> candidates, Message message) throws MessagingException {
-        String[] values = message.getHeader("Received");
-        if (values == null) {
-            return;
-        }
-        for (String value : values) {
-            Matcher matcher = RECEIVED_FOR_PATTERN.matcher(value);
-            while (matcher.find()) {
-                candidates.add(matcher.group(1));
-            }
-        }
     }
 
     private String extractBody(Object content) throws Exception {
@@ -256,19 +281,15 @@ public class TicketMailReaderService {
 
     private String extractActivationUrl(String body) {
         Matcher matcher = URL_PATTERN.matcher(body == null ? "" : body);
-        String fallback = null;
         while (matcher.find()) {
             String url = cleanupUrl(matcher.group());
-            if (StringUtils.isBlank(fallback)) {
-                fallback = url;
-            }
             String lower = url.toLowerCase(Locale.ROOT);
             if (lower.contains("activate") || lower.contains("activation") || lower.contains("verify")
                 || lower.contains("confirm") || lower.contains("token")) {
                 return url;
             }
         }
-        return fallback;
+        return null;
     }
 
     private String stripHtml(String body) {
@@ -354,12 +375,14 @@ public class TicketMailReaderService {
         private static final long serialVersionUID = 1L;
 
         private boolean parsed;
+        private String parseType;
         private String verifyCode;
         private String activationUrl;
         private String subject;
         private String fromAddress;
         private Date receivedAt;
         private String messageId;
+        private String folderName;
         private String bodyExcerpt;
         private String message;
     }

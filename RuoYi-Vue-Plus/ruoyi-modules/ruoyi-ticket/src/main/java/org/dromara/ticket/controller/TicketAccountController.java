@@ -17,8 +17,10 @@ import org.dromara.ticket.domain.vo.TicketPhoneNumberVo;
 import org.dromara.ticket.domain.vo.TicketManagedAccountVo;
 import org.dromara.ticket.service.ITicketOpsService;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -60,5 +62,12 @@ public class TicketAccountController extends BaseController {
     @PutMapping
     public R<Void> edit(@Valid @RequestBody TicketManagedAccountUpdateBo bo) {
         return toAjax(ticketOpsService.updateManagedAccount(bo));
+    }
+
+    @SaCheckPermission("ticket:account:remove")
+    @Log(title = "账号池", businessType = BusinessType.DELETE)
+    @DeleteMapping("/{accountIds}")
+    public R<Void> remove(@PathVariable Long[] accountIds) {
+        return toAjax(ticketOpsService.removeManagedAccounts(accountIds));
     }
 }

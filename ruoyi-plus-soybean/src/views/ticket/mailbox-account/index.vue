@@ -51,31 +51,24 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
       {
         key: 'email',
         title: '邮箱',
-        align: 'center',
-        minWidth: 220,
-        render: row => renderTicketEllipsis(row.email)
-      },
-      {
-        key: 'username',
-        title: '用户名',
-        align: 'center',
-        minWidth: 220,
-        render: row => renderTicketEllipsis(row.username)
+        align: 'left',
+        fixed: 'left',
+        minWidth: 260,
+        render: row => renderMailboxIdentity(row)
       },
       {
         key: 'password',
         title: '密码',
         align: 'center',
-        minWidth: 220,
+        minWidth: 180,
         render: row => renderTicketEllipsis(row.password)
       },
-      { key: 'domain', title: '域名', align: 'center', minWidth: 120 },
-      { key: 'provider', title: '服务商', align: 'center', width: 100 },
+      { key: 'provider', title: '服务商', align: 'center', width: 90 },
       {
         key: 'stalwartPrincipalId',
         title: 'Stalwart ID',
         align: 'center',
-        minWidth: 180,
+        width: 110,
         render: row => renderTicketEllipsis(row.stalwartPrincipalId)
       },
       {
@@ -89,33 +82,25 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
         key: 'usedAccountEmail',
         title: '使用账号',
         align: 'center',
-        minWidth: 220,
+        minWidth: 190,
         render: row => renderTicketEllipsis(row.usedAccountEmail || (row.usedAccountId ? String(row.usedAccountId) : '-'))
       },
-      { key: 'usedTime', title: '使用时间', align: 'center', minWidth: 160 },
-      {
-        key: 'lastError',
-        title: '最近错误',
-        align: 'center',
-        minWidth: 240,
-        render: row => renderTicketEllipsis(row.lastError)
-      },
+      { key: 'usedTime', title: '使用时间', align: 'center', minWidth: 150 },
       {
         key: 'latestMail',
         title: '最新邮件内容',
-        align: 'center',
-        minWidth: 360,
+        align: 'left',
+        minWidth: 320,
         render: row => renderLatestMail(row)
       },
-      { key: 'lastMailSyncTime', title: '最近同步', align: 'center', minWidth: 160 },
+      { key: 'lastMailSyncTime', title: '同步时间', align: 'center', minWidth: 150 },
       {
-        key: 'lastMailSyncError',
-        title: '同步错误',
+        key: 'lastError',
+        title: '异常',
         align: 'center',
-        minWidth: 220,
-        render: row => renderTicketEllipsis(row.lastMailSyncError)
+        minWidth: 150,
+        render: row => renderMailboxError(row)
       },
-      { key: 'createTime', title: '创建时间', align: 'center', minWidth: 160 },
       {
         key: 'syncAction',
         title: '操作',
@@ -158,6 +143,31 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
     ]
   });
 
+function renderMailboxIdentity(row: Api.Ticket.MailboxAccount) {
+  const isLegacyDomain = row.email?.endsWith('@orderx.top') || row.domain === 'orderx.top';
+
+  return h('div', { class: 'mailbox-identity' }, [
+    h('div', { class: 'mailbox-identity__main' }, [
+      h(
+        NEllipsis,
+        { tooltip: true, style: { maxWidth: '210px' } },
+        { default: () => row.email || '-' }
+      ),
+      isLegacyDomain
+        ? h(NTag, { size: 'tiny', type: 'warning', bordered: false }, { default: () => '旧域名' })
+        : h(NTag, { size: 'tiny', type: 'success', bordered: false }, { default: () => row.domain || 'gjcytech.com' })
+    ]),
+    h('div', { class: 'mailbox-identity__sub' }, [
+      h('span', '登录名：'),
+      h(
+        NEllipsis,
+        { tooltip: true, style: { maxWidth: '150px' } },
+        { default: () => row.username || '-' }
+      )
+    ])
+  ]);
+}
+
 function renderLatestMail(row: Api.Ticket.MailboxAccount) {
   const hasMail = !!(
     row.latestMailSubject ||
@@ -166,7 +176,10 @@ function renderLatestMail(row: Api.Ticket.MailboxAccount) {
     row.latestActivationUrl
   );
   if (!hasMail) {
-    return h('span', { class: 'text-12px text-text-3' }, '暂无邮件');
+    return h('div', { class: 'mailbox-mail mailbox-mail--empty' }, [
+      h('div', { class: 'mailbox-mail__title' }, '暂无邮件'),
+      h('div', { class: 'mailbox-mail__meta' }, row.lastMailSyncTime ? `最近同步：${row.lastMailSyncTime}` : '尚未同步')
+    ]);
   }
 
   const previewTitle = row.latestMailSubject || '无标题邮件';
@@ -176,25 +189,26 @@ function renderLatestMail(row: Api.Ticket.MailboxAccount) {
     { trigger: 'hover', placement: 'left', width: 460 },
     {
       trigger: () =>
-        h('div', { class: 'max-w-330px cursor-help text-left' }, [
-          h('div', { class: 'flex items-center gap-6px' }, [
+        h('div', { class: 'mailbox-mail cursor-help' }, [
+          h('div', { class: 'mailbox-mail__tags' }, [
             row.latestVerifyCode
-              ? h(NTag, { size: 'small', type: 'success', bordered: false }, { default: () => row.latestVerifyCode })
+              ? h(NTag, { size: 'tiny', type: 'success', bordered: false }, { default: () => row.latestVerifyCode })
               : null,
             row.latestActivationUrl
-              ? h(NTag, { size: 'small', type: 'info', bordered: false }, { default: () => '激活链接' })
+              ? h(NTag, { size: 'tiny', type: 'info', bordered: false }, { default: () => '激活链接' })
               : null
           ]),
           h(
             NEllipsis,
-            { tooltip: false, style: { maxWidth: '330px' } },
+            { tooltip: false, style: { maxWidth: '280px' } },
             { default: () => previewTitle }
           ),
           h(
             NEllipsis,
-            { tooltip: false, lineClamp: 2, style: { maxWidth: '330px' } },
+            { tooltip: false, lineClamp: 1, style: { maxWidth: '280px' } },
             { default: () => previewExcerpt }
-          )
+          ),
+          h('div', { class: 'mailbox-mail__meta' }, row.latestMailReceivedAt || row.latestMailFrom || '查看邮件详情')
         ]),
       default: () =>
         h('div', { class: 'max-w-430px text-left text-12px leading-20px' }, [
@@ -212,6 +226,44 @@ function renderLatestMail(row: Api.Ticket.MailboxAccount) {
         ])
     }
   );
+}
+
+function renderMailboxError(row: Api.Ticket.MailboxAccount) {
+  const rawError = row.lastError || row.lastMailSyncError;
+  if (!rawError) {
+    return h('span', { class: 'text-12px text-text-3' }, '-');
+  }
+
+  const isDomainSwitch = rawError.includes('域名') || rawError.includes('gjcytech.com');
+  const label = isDomainSwitch ? '旧域名停用' : row.lastMailSyncError ? '同步异常' : '创建异常';
+  const type = isDomainSwitch ? 'warning' : 'error';
+
+  return h(
+    NPopover,
+    { trigger: 'hover', placement: 'left', width: 360 },
+    {
+      trigger: () =>
+        h('div', { class: 'inline-flex cursor-help flex-col items-center gap-4px' }, [
+          h(NTag, { size: 'small', type, bordered: false }, { default: () => label }),
+          h(
+            NEllipsis,
+            { tooltip: false, style: { maxWidth: '120px' } },
+            { default: () => rawError }
+          )
+        ]),
+      default: () => h('div', { class: 'max-w-330px break-all text-12px leading-20px' }, rawError)
+    }
+  );
+}
+
+function getMailboxRowClass(row: Api.Ticket.MailboxAccount) {
+  if (row.status === 'disabled') {
+    return 'mailbox-row-disabled';
+  }
+  if (row.email?.endsWith('@orderx.top') || row.domain === 'orderx.top') {
+    return 'mailbox-row-legacy';
+  }
+  return '';
 }
 
 function resetSearch() {
@@ -374,6 +426,7 @@ void getData();
         :flex-height="!appStore.isMobile"
         :scroll-x="scrollX"
         :row-key="row => row.mailboxId"
+        :row-class-name="getMailboxRowClass"
         :pagination="mobilePagination"
         class="sm:h-full"
       />
@@ -397,3 +450,75 @@ void getData();
     </NModal>
   </div>
 </template>
+
+<style scoped>
+.mailbox-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding-left: 2px;
+}
+
+.mailbox-identity__main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--text-color-1);
+}
+
+.mailbox-identity__sub {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-color-3);
+}
+
+.mailbox-mail {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 300px;
+  min-height: 44px;
+  justify-content: center;
+  text-align: left;
+}
+
+.mailbox-mail--empty {
+  color: var(--text-color-3);
+}
+
+.mailbox-mail__tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 18px;
+}
+
+.mailbox-mail__title {
+  font-size: 13px;
+  color: var(--text-color-2);
+}
+
+.mailbox-mail__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-color-3);
+}
+
+:deep(.mailbox-row-disabled td),
+:deep(.mailbox-row-legacy td) {
+  background: #fbfcfe;
+  color: var(--text-color-3);
+}
+
+:deep(.mailbox-row-disabled:hover td),
+:deep(.mailbox-row-legacy:hover td) {
+  background: #f6f8fb;
+}
+</style>

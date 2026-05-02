@@ -20,6 +20,7 @@ public class TicketManagedAccountUpdateBo extends BaseEntity {
 
     private String accountInfo;
     private String reqData;
+    private String loginReqData;
     private String accountStatus;
     private String loginStatus;
     private String lastError;

@@ -96,6 +96,7 @@ declare namespace Api {
       email: string;
       accountInfo?: string;
       reqData?: string;
+      loginReqData?: string;
       accountStatus: string;
       loginStatus: string;
       lastLoginTime: string;
@@ -125,6 +126,7 @@ declare namespace Api {
       email: string;
       accountInfo: string;
       reqData: string;
+      loginReqData: string;
       accountStatus: string;
       loginStatus: string;
       lastError: string;
@@ -282,6 +284,7 @@ declare namespace Api {
       email: string;
       accountInfo?: string;
       reqData?: string;
+      loginReqData?: string;
       taskName: string;
     }>;
 

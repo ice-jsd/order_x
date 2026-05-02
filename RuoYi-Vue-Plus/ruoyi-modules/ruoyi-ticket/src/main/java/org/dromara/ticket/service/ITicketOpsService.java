@@ -42,6 +42,8 @@ public interface ITicketOpsService {
 
     int updateManagedAccount(TicketManagedAccountUpdateBo bo);
 
+    int removeManagedAccounts(Long[] accountIds);
+
     TableDataInfo<TicketManagedAccountVo> selectLoginableAccountPage(Long platformId, TicketManagedAccountBo bo, PageQuery pageQuery);
 
     R<Long> loginAccounts(Long platformId, TicketBatchLoginBo bo);
@@ -90,7 +92,13 @@ public interface ITicketOpsService {
 
     R<Void> reportExternalLoginSuccess(TicketExternalLoginReportBo bo);
 
+    R<Void> submitExternalLoginReqData(TicketExternalLoginReqDataBo bo);
+
     R<TicketExternalOfflineAccountVo> fetchNextOfflineAccount(String platformCode);
 
     R<TicketExternalVerifyCodeVo> verifyCode(String platformCode, String email);
+
+    R<TicketExternalVerifyCodeVo> emailVerifyCode(String platformCode, String email);
+
+    R<TicketExternalVerifyCodeVo> emailActivationLink(String platformCode, String email);
 }

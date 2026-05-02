@@ -1,13 +1,14 @@
 package org.dromara.ticket.domain.bo;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 import java.io.Serial;
 import java.io.Serializable;
 
 @Data
-public class TicketExternalLoginReportBo implements Serializable {
+public class TicketExternalRegistrationConfirmBo implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -18,13 +19,10 @@ public class TicketExternalLoginReportBo implements Serializable {
     @NotBlank(message = "email不能为空")
     private String email;
 
-    /**
-     * 兼容旧调用方。新链路会将该值写入 loginReqData，不再覆盖注册/手机号 reqData。
-     */
-    private String reqData;
+    @NotNull(message = "success不能为空")
+    private Boolean success;
 
-    /**
-     * 登录请求上下文(JSON)，用于保存登录态、Cookie、Header 等下单所需上下文。
-     */
-    private String loginReqData;
+    private String accountInfo;
+    private String reqData;
+    private String message;
 }

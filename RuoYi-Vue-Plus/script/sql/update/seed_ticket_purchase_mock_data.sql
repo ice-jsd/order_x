@@ -68,23 +68,27 @@ INSERT INTO `ticket_phone_number` (
   (9200014, '000000', '09022340014', '+81', 'mock-supplier-d', 'available', 'Mock 加购门店付款号码', 103, 1, NOW(), 1, NOW(), 0);
 
 INSERT INTO `ticket_managed_account` (
-  `account_id`, `tenant_id`, `platform_id`, `phone_id`, `email`, `account_info`, `req_data`, `account_status`, `login_status`,
+  `account_id`, `tenant_id`, `platform_id`, `phone_id`, `email`, `account_info`, `req_data`, `login_req_data`, `account_status`, `login_status`,
   `last_login_time`, `last_error`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `del_flag`
 ) VALUES
   (9300011, '000000', 9100011, 9200011, 'mock-direct-online-001@test.local',
    '{"nickname":"mock-direct-online","region":"JP","channel":"email"}',
    '{"sessionToken":"mock-session-001","channel":"email","browser":"mock"}',
+   '{"sessionToken":"mock-session-001","channel":"email","browser":"mock"}',
    'registered', 'logged_in', DATE_SUB(NOW(), INTERVAL 2 MINUTE), NULL, 103, 1, NOW(), 1, NOW(), 0),
   (9300012, '000000', 9100012, 9200012, 'mock-direct-pickup-cod-002@test.local',
    '{"nickname":"mock-direct-pickup-cod","region":"JP","channel":"email"}',
+   '{"sessionToken":"mock-session-002","channel":"email","browser":"mock"}',
    '{"sessionToken":"mock-session-002","channel":"email","browser":"mock"}',
    'registered', 'logged_in', DATE_SUB(NOW(), INTERVAL 3 MINUTE), NULL, 103, 1, NOW(), 1, NOW(), 0),
   (9300013, '000000', 9100013, 9200013, 'mock-cart-online-003@test.local',
    '{"nickname":"mock-cart-online","region":"JP","channel":"email"}',
    '{"sessionToken":"mock-session-003","channel":"email","browser":"mock"}',
+   '{"sessionToken":"mock-session-003","channel":"email","browser":"mock"}',
    'registered', 'logged_in', DATE_SUB(NOW(), INTERVAL 4 MINUTE), NULL, 103, 1, NOW(), 1, NOW(), 0),
   (9300014, '000000', 9100014, 9200014, 'mock-cart-pickup-cod-004@test.local',
    '{"nickname":"mock-cart-pickup-cod","region":"JP","channel":"email"}',
+   '{"sessionToken":"mock-session-004","channel":"email","browser":"mock"}',
    '{"sessionToken":"mock-session-004","channel":"email","browser":"mock"}',
    'registered', 'logged_in', DATE_SUB(NOW(), INTERVAL 5 MINUTE), NULL, 103, 1, NOW(), 1, NOW(), 0);
 

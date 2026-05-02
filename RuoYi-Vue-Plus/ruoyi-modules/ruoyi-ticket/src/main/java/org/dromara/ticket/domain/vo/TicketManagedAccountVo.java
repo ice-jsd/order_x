@@ -22,6 +22,7 @@ public class TicketManagedAccountVo implements Serializable {
     private String email;
     private String accountInfo;
     private String reqData;
+    private String loginReqData;
     private String accountStatus;
     private String loginStatus;
     private Date lastLoginTime;

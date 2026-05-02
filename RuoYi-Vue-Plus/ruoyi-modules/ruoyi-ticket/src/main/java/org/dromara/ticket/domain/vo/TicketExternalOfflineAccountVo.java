@@ -12,5 +12,5 @@ public class TicketExternalOfflineAccountVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private String email;
-    private String accountInfo;
+    private String password;
 }

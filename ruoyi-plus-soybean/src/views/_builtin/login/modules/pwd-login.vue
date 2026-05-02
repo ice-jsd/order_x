@@ -36,7 +36,7 @@ const tenantOption = ref<SelectOption[]>([]);
 const model: Api.Auth.PwdLoginForm = reactive({
   tenantId: '000000',
   username: 'admin',
-  password: 'admin123'
+  password: ''
 });
 
 type RuleKey = Extract<keyof Api.Auth.PwdLoginForm, 'username' | 'password' | 'code' | 'tenantId'>;
@@ -75,10 +75,10 @@ handleFetchTenantList();
 
 async function handleSubmit() {
   await validate();
-  // 勾选了需要记住密码设置在 localStorage 中设置记住用户名和密码
+  // 只记住租户和账号，密码必须每次手动输入。
   if (remberMe.value) {
-    const { tenantId, username, password } = model;
-    localStg.set('loginRember', encryptWithAes(JSON.stringify({ tenantId, username, password }), aesKey));
+    const { tenantId, username } = model;
+    localStg.set('loginRember', encryptWithAes(JSON.stringify({ tenantId, username }), aesKey));
   } else {
     // 否则移除
     localStg.remove('loginRember');
@@ -110,7 +110,8 @@ function handleLoginRember() {
   if (!loginRember) return;
   try {
     remberMe.value = true;
-    Object.assign(model, JSON.parse(decryptWithAes(loginRember, aesKey)));
+    const { tenantId, username } = JSON.parse(decryptWithAes(loginRember, aesKey));
+    Object.assign(model, { tenantId, username, password: '' });
   } catch {}
 }
 

@@ -30,6 +30,9 @@ export const relationStatusOptions = [
 ];
 
 export const accountStatusOptions = [
+  { label: '待注册', value: 'pending_register' },
+  { label: '待激活', value: 'pending_activation' },
+  { label: '已激活', value: 'activated' },
   { label: '已注册', value: 'registered' },
   { label: '停用', value: 'disabled' }
 ];
@@ -147,6 +150,9 @@ const colorMap: Record<string, string> = {
   registered: 'success',
   register_failed: 'error',
   verification_pending: 'warning',
+  pending_register: 'info',
+  pending_activation: 'warning',
+  activated: 'success',
   logged_in: 'success',
   login_failed: 'error',
   offline: 'default',

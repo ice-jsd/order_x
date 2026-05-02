@@ -20,4 +20,5 @@ public class TicketManagedAccountCreateBo extends BaseEntity {
     private String email;
     private String accountInfo;
     private String reqData;
+    private String loginReqData;
 }

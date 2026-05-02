@@ -410,7 +410,7 @@ const local = {
       },
       pwdLogin: {
         title: '密码登录',
-        rememberMe: '记住密码',
+        rememberMe: '记住账号',
         forgetPassword: '忘记密码？',
         register: '注册账号',
         otherAccountLogin: '其他账号登录',

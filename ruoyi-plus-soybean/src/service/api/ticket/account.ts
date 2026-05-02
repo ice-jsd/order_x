@@ -15,3 +15,7 @@ export function fetchCreateTicketAccount(data: Api.Ticket.AccountOperateParams) 
 export function fetchUpdateTicketAccount(data: Api.Ticket.AccountOperateParams) {
   return request<boolean>({ url: '/ticket/account', method: 'put', data });
 }
+
+export function fetchDeleteTicketAccounts(accountIds: CommonType.IdType[]) {
+  return request<boolean>({ url: `/ticket/account/${accountIds.join(',')}`, method: 'delete' });
+}

@@ -15,7 +15,7 @@ public class TicketStalwartProperties {
     private boolean enabled = true;
 
     /**
-     * Stalwart 管理接口地址，例如 https://mail.orderx.top:9443。
+     * Stalwart 管理接口地址，例如 https://mail.gjcytech.com:9443。
      */
     private String baseUrl;
 
@@ -27,7 +27,7 @@ public class TicketStalwartProperties {
     /**
      * 自动生成邮箱使用的域名。
      */
-    private String domain = "orderx.top";
+    private String domain = "gjcytech.com";
 
     /**
      * 连接超时时间。

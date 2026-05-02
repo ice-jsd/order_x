@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS `ticket_managed_account` (
   `email` varchar(255) NOT NULL COMMENT '账号邮箱',
   `account_info` longtext COMMENT '账号信息(JSON)',
   `req_data` longtext COMMENT '请求上下文(JSON)',
+  `login_req_data` longtext COMMENT '登录请求上下文(JSON)',
   `account_status` varchar(32) DEFAULT 'registered' COMMENT '账号状态',
   `login_status` varchar(32) DEFAULT 'offline' COMMENT '登录状态',
   `last_login_time` datetime DEFAULT NULL COMMENT '最近登录时间',
@@ -368,6 +369,11 @@ INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`
 SELECT 20302, '账号编辑', 20003, 2, '', '', '', 1, 0, 'F', '0', '0', 'ticket:account:edit', '#', 103, 1, SYSDATE(), NULL, NULL, ''
 FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20302);
+
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
+SELECT 20303, '账号删除', 20003, 3, '', '', '', 1, 0, 'F', '0', '0', 'ticket:account:remove', '#', 103, 1, SYSDATE(), NULL, NULL, ''
+FROM dual
+WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20303);
 
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
 SELECT 20901, '邮箱查询', 20010, 1, '', '', '', 1, 0, 'F', '0', '0', 'ticket:mailbox:list', '#', 103, 1, SYSDATE(), NULL, NULL, ''

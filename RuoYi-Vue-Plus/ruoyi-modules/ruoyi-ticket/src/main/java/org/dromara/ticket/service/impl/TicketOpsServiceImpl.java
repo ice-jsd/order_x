@@ -53,11 +53,13 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
     private static final Set<String> ACTIVE_RELATION_STATUSES = Set.of("registered", "logged_in", "registering", "verification_pending");
     private static final Set<String> ENABLED_PHONE_STATUSES = Set.of("available", "disabled");
     private static final Set<String> RUNNING_REGISTER_RELATION_STATUSES = Set.of("registering", "verification_pending");
-    private static final Set<String> ACCOUNT_STATUSES = Set.of("registered", "disabled");
+    private static final Set<String> ACCOUNT_STATUSES = Set.of("pending_register", "pending_activation", "activated", "registered", "disabled");
     private static final Set<String> LOGIN_STATUSES = Set.of("offline", "logged_in", "login_failed");
     private static final Set<String> EXECUTION_RUNNING_STATUSES = Set.of("running");
     private static final Set<String> EXECUTION_PAYMENT_PENDING_STATUSES = Set.of("submitted", "pending_payment");
     private static final Set<String> EXECUTION_FAILURE_STATUSES = Set.of("failed", "blocked", "timeout");
+    private static final int AUDIT_BUSINESS_KEY_MAX_LENGTH = 128;
+    private static final int AUDIT_MESSAGE_MAX_LENGTH = 500;
 
     private final TicketPlatformConfigMapper platformMapper;
     private final TicketPhoneNumberMapper phoneMapper;
@@ -67,6 +69,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
     private final TicketRegistrationBatchDetailMapper registrationBatchDetailMapper;
     private final TicketLoginBatchMapper loginBatchMapper;
     private final TicketLoginBatchDetailMapper loginBatchDetailMapper;
+    private final TicketMailboxAccountMapper mailboxAccountMapper;
     private final TicketEventConfigMapper eventMapper;
     private final TicketSaleTaskMapper saleTaskMapper;
     private final TicketSaleTaskAccountMapper saleTaskAccountMapper;
@@ -448,6 +451,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         account.setEmail(email);
         account.setAccountInfo(normalizeJsonText(bo.getAccountInfo()));
         account.setReqData(normalizeJsonText(bo.getReqData()));
+        account.setLoginReqData(normalizeJsonText(bo.getLoginReqData()));
         account.setAccountStatus("registered");
         account.setLoginStatus("offline");
         account.setLastLoginTime(null);
@@ -505,10 +509,12 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         boolean newlyLoggedIn = "logged_in".equals(loginStatus) && !"logged_in".equals(account.getLoginStatus());
         String accountInfo = normalizeJsonText(bo.getAccountInfo());
         String reqData = normalizeJsonText(bo.getReqData());
+        String loginReqData = normalizeJsonText(bo.getLoginReqData());
         String lastError = StringUtils.isBlank(bo.getLastError()) ? null : StringUtils.trim(bo.getLastError());
         account.setEmail(email);
         account.setAccountInfo(accountInfo);
         account.setReqData(reqData);
+        account.setLoginReqData(loginReqData);
         account.setAccountStatus(accountStatus);
         account.setLoginStatus(loginStatus);
         account.setLastError(lastError);
@@ -520,6 +526,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             .set(TicketManagedAccount::getEmail, email)
             .set(TicketManagedAccount::getAccountInfo, accountInfo)
             .set(TicketManagedAccount::getReqData, reqData)
+            .set(TicketManagedAccount::getLoginReqData, loginReqData)
             .set(TicketManagedAccount::getAccountStatus, accountStatus)
             .set(TicketManagedAccount::getLoginStatus, loginStatus)
             .set(TicketManagedAccount::getLastError, lastError);
@@ -549,6 +556,40 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int removeManagedAccounts(Long[] accountIds) {
+        List<Long> ids = Arrays.stream(Optional.ofNullable(accountIds).orElse(new Long[0]))
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+        if (ids.isEmpty()) {
+            return 0;
+        }
+
+        Date now = new Date();
+        relationMapper.update(null, Wrappers.<TicketPhonePlatformRelation>lambdaUpdate()
+            .in(TicketPhonePlatformRelation::getAccountId, ids)
+            .set(TicketPhonePlatformRelation::getStatus, "register_failed")
+            .set(TicketPhonePlatformRelation::getLastError, "账号已删除")
+            .set(TicketPhonePlatformRelation::getLastOperateTime, now));
+
+        mailboxAccountMapper.update(null, Wrappers.<TicketMailboxAccount>lambdaUpdate()
+            .in(TicketMailboxAccount::getUsedAccountId, ids)
+            .eq(TicketMailboxAccount::getStatus, "used")
+            .set(TicketMailboxAccount::getStatus, "available")
+            .set(TicketMailboxAccount::getUsedAccountId, null)
+            .set(TicketMailboxAccount::getUsedTime, null)
+            .set(TicketMailboxAccount::getLastError, null));
+
+        saleTaskAccountMapper.delete(Wrappers.<TicketSaleTaskAccount>lambdaQuery()
+            .in(TicketSaleTaskAccount::getAccountId, ids));
+
+        int rows = accountMapper.deleteByIds(ids);
+        recordAudit("account", "remove", "account", ids.toString(), "success", "账号已删除", ids);
+        return rows;
+    }
+
+    @Override
     public TableDataInfo<TicketManagedAccountVo> selectLoginableAccountPage(Long platformId, TicketManagedAccountBo bo, PageQuery pageQuery) {
         List<Long> availablePhoneIds = phoneMapper.selectList(new LambdaQueryWrapper<TicketPhoneNumber>()
                 .select(TicketPhoneNumber::getPhoneId)
@@ -565,7 +606,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             .like(StringUtils.isNotBlank(bo.getEmail()), TicketManagedAccount::getEmail, bo.getEmail())
             .eq(StringUtils.isNotBlank(bo.getLoginStatus()), TicketManagedAccount::getLoginStatus, bo.getLoginStatus())
             .in(TicketManagedAccount::getPhoneId, availablePhoneIds)
-            .eq(TicketManagedAccount::getAccountStatus, "registered")
+            .in(TicketManagedAccount::getAccountStatus, List.of("activated", "registered"))
             .orderByDesc(TicketManagedAccount::getAccountId);
         Page<TicketManagedAccountVo> page = accountMapper.selectVoPage(pageQuery.build(), wrapper);
         enrichAccounts(page.getRecords());
@@ -980,7 +1021,11 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
 
         Date now = new Date();
         TicketManagedAccount account = accounts.get(0);
-        account.setReqData(bo.getReqData());
+        String loginReqData = normalizeJsonText(StringUtils.defaultIfBlank(bo.getLoginReqData(), bo.getReqData()));
+        if (StringUtils.isBlank(loginReqData)) {
+            return R.fail("loginReqData不能为空");
+        }
+        account.setLoginReqData(loginReqData);
         account.setLoginStatus("logged_in");
         account.setLastLoginTime(now);
         account.setLastError(null);
@@ -997,8 +1042,46 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         auditPayload.put("platformCode", bo.getPlatformCode());
         auditPayload.put("email", bo.getEmail());
         auditPayload.put("accountId", account.getAccountId());
-        auditPayload.put("reqData", bo.getReqData());
+        auditPayload.put("loginReqData", loginReqData);
         recordAudit("external_account", "loginSuccess", "account", String.valueOf(account.getAccountId()), "success", "external login reported", auditPayload);
+        return R.ok();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public R<Void> submitExternalLoginReqData(TicketExternalLoginReqDataBo bo) {
+        TicketPlatformConfig platform = findPlatformByCode(bo.getPlatformCode());
+        if (platform == null) {
+            return R.fail("平台不存在: " + bo.getPlatformCode());
+        }
+
+        List<TicketManagedAccount> accounts = accountMapper.selectList(new LambdaQueryWrapper<TicketManagedAccount>()
+            .eq(TicketManagedAccount::getPlatformId, platform.getPlatformId())
+            .eq(TicketManagedAccount::getEmail, bo.getEmail())
+            .orderByAsc(TicketManagedAccount::getAccountId)
+            .last("limit 2"));
+        if (CollUtil.isEmpty(accounts)) {
+            return R.fail("账号不存在: " + bo.getEmail());
+        }
+        if (accounts.size() > 1) {
+            return R.fail("账号数据异常，存在重复邮箱: " + bo.getEmail());
+        }
+
+        String loginReqData = normalizeJsonText(bo.getLoginReqData());
+        if (StringUtils.isBlank(loginReqData)) {
+            return R.fail("loginReqData不能为空");
+        }
+        TicketManagedAccount account = accounts.get(0);
+        accountMapper.update(null, Wrappers.lambdaUpdate(TicketManagedAccount.class)
+            .eq(TicketManagedAccount::getAccountId, account.getAccountId())
+            .set(TicketManagedAccount::getLoginReqData, loginReqData));
+
+        Map<String, Object> auditPayload = new LinkedHashMap<>();
+        auditPayload.put("platformCode", bo.getPlatformCode());
+        auditPayload.put("email", bo.getEmail());
+        auditPayload.put("accountId", account.getAccountId());
+        auditPayload.put("loginReqData", loginReqData);
+        recordAudit("external_account", "loginReqData", "account", String.valueOf(account.getAccountId()), "success", "external login req data submitted", auditPayload);
         return R.ok();
     }
 
@@ -1009,24 +1092,75 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             return R.fail("平台不存在: " + platformCode);
         }
 
-        TicketManagedAccount account = accountMapper.selectOne(new LambdaQueryWrapper<TicketManagedAccount>()
+        List<TicketManagedAccount> accounts = accountMapper.selectList(new LambdaQueryWrapper<TicketManagedAccount>()
             .eq(TicketManagedAccount::getPlatformId, platform.getPlatformId())
-            .eq(TicketManagedAccount::getAccountStatus, "registered")
+            .in(TicketManagedAccount::getAccountStatus, List.of("registered", "activated"))
             .eq(TicketManagedAccount::getLoginStatus, "offline")
             .orderByAsc(TicketManagedAccount::getAccountId)
-            .last("limit 1"), false);
+            .last("limit 50"));
+        TicketManagedAccount account = null;
+        String password = null;
+        for (TicketManagedAccount candidate : accounts) {
+            password = resolveAccountLoginPassword(candidate);
+            if (StringUtils.isNotBlank(password)) {
+                account = candidate;
+                break;
+            }
+        }
         if (account == null) {
             return R.fail("没有需要登录的账号");
         }
 
         TicketExternalOfflineAccountVo vo = new TicketExternalOfflineAccountVo();
         vo.setEmail(account.getEmail());
-        vo.setAccountInfo(account.getAccountInfo());
+        vo.setPassword(password);
         return R.ok(vo);
+    }
+
+    private String resolveAccountLoginPassword(TicketManagedAccount account) {
+        if (StringUtils.isBlank(account.getAccountInfo())) {
+            return resolveMailboxPlatformPassword(account.getEmail());
+        }
+        try {
+            String password = JSONUtil.parseObj(account.getAccountInfo()).getStr("platformPassword");
+            if (StringUtils.isNotBlank(password)) {
+                return password;
+            }
+        } catch (Exception ex) {
+            log.warn("parse account platform password failed, accountId={}", account.getAccountId(), ex);
+        }
+        return resolveMailboxPlatformPassword(account.getEmail());
+    }
+
+    private String resolveMailboxPlatformPassword(String email) {
+        if (StringUtils.isBlank(email)) {
+            return null;
+        }
+        TicketMailboxAccount mailbox = mailboxAccountMapper.selectOne(new LambdaQueryWrapper<TicketMailboxAccount>()
+            .eq(TicketMailboxAccount::getEmail, email)
+            .last("limit 1"), false);
+        if (mailbox == null || StringUtils.isBlank(mailbox.getUsername())) {
+            return null;
+        }
+        return mailbox.getUsername() + "@ABC";
     }
 
     @Override
     public R<TicketExternalVerifyCodeVo> verifyCode(String platformCode, String email) {
+        return readEmailResult(platformCode, email, null);
+    }
+
+    @Override
+    public R<TicketExternalVerifyCodeVo> emailVerifyCode(String platformCode, String email) {
+        return readEmailResult(platformCode, email, "verify_code");
+    }
+
+    @Override
+    public R<TicketExternalVerifyCodeVo> emailActivationLink(String platformCode, String email) {
+        return readEmailResult(platformCode, email, "activation_url");
+    }
+
+    private R<TicketExternalVerifyCodeVo> readEmailResult(String platformCode, String email, String expectedParseType) {
         TicketPlatformConfig platform = findPlatformByCode(platformCode);
         if (platform == null) {
             return R.fail("平台不存在: " + platformCode);
@@ -1045,18 +1179,46 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         }
 
         TicketManagedAccount account = accounts.get(0);
-        TicketMailReaderService.MailReadResult mail = ticketMailReaderService.readLatestForEmail(account.getEmail());
+        TicketMailboxAccount mailbox = findMailboxAccount(account.getEmail());
+        if (mailbox == null) {
+            return R.fail("邮箱账号池不存在该邮箱: " + account.getEmail());
+        }
 
-        accountMapper.update(null, new LambdaUpdateWrapper<TicketManagedAccount>()
-            .eq(TicketManagedAccount::getAccountId, account.getAccountId())
-            .set(TicketManagedAccount::getLatestVerifyCode, mail.getVerifyCode())
-            .set(TicketManagedAccount::getLatestActivationUrl, mail.getActivationUrl())
-            .set(TicketManagedAccount::getLatestMailSubject, mail.getSubject())
-            .set(TicketManagedAccount::getLatestMailReceivedAt, mail.getReceivedAt())
-            .set(TicketManagedAccount::getLatestMailMessageId, mail.getMessageId()));
+        TicketMailReaderService.MailReadResult mail;
+        if (mailbox != null) {
+            try {
+                mail = switch (StringUtils.blankToDefault(expectedParseType, "")) {
+                    case "verify_code" -> ticketMailReaderService.readLatestVerifyCodeForMailbox(mailbox.getUsername(), mailbox.getPassword());
+                    case "activation_url" -> ticketMailReaderService.readLatestActivationUrlForMailbox(mailbox.getUsername(), mailbox.getPassword());
+                    default -> ticketMailReaderService.readLatestForMailbox(mailbox.getUsername(), mailbox.getPassword());
+                };
+            } catch (ServiceException e) {
+                mail = readCachedMailboxEmailResult(mailbox, expectedParseType);
+                if (mail == null) {
+                    return R.fail(e.getMessage());
+                }
+            }
+        } else {
+            return R.fail("邮箱账号池不存在该邮箱: " + account.getEmail());
+        }
+
+        if (!mail.isParsed()) {
+            TicketMailReaderService.MailReadResult cachedMail = readCachedMailboxEmailResult(mailbox, expectedParseType);
+            if (cachedMail != null) {
+                mail = cachedMail;
+            }
+        }
+
+        updateAccountLatestMail(account.getAccountId(), mail);
 
         if (!mail.isParsed()) {
             return R.fail(mail.getMessage());
+        }
+        if ("verify_code".equals(expectedParseType) && StringUtils.isBlank(mail.getVerifyCode())) {
+            return R.fail("未解析到邮箱验证码");
+        }
+        if ("activation_url".equals(expectedParseType) && StringUtils.isBlank(mail.getActivationUrl())) {
+            return R.fail("未解析到邮箱激活链接");
         }
 
         TicketExternalVerifyCodeVo vo = new TicketExternalVerifyCodeVo();
@@ -1065,6 +1227,62 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         vo.setSubject(mail.getSubject());
         vo.setReceivedAt(mail.getReceivedAt());
         return R.ok(vo);
+    }
+
+    private TicketMailboxAccount findMailboxAccount(String email) {
+        return mailboxAccountMapper.selectOne(new LambdaQueryWrapper<TicketMailboxAccount>()
+            .eq(TicketMailboxAccount::getEmail, email)
+            .orderByDesc(TicketMailboxAccount::getLastMailSyncTime)
+            .orderByDesc(TicketMailboxAccount::getMailboxId)
+            .last("limit 1"));
+    }
+
+    private TicketMailReaderService.MailReadResult readCachedMailboxEmailResult(TicketMailboxAccount mailbox, String expectedParseType) {
+        if (mailbox == null) {
+            return null;
+        }
+
+        String activationUrl = mailbox.getLatestActivationUrl();
+        String verifyCode = mailbox.getLatestVerifyCode();
+        if ("activation_url".equals(expectedParseType) && StringUtils.isBlank(activationUrl)) {
+            return null;
+        }
+        if ("verify_code".equals(expectedParseType) && StringUtils.isBlank(verifyCode)) {
+            return null;
+        }
+        if (StringUtils.isBlank(expectedParseType) && StringUtils.isBlank(activationUrl) && StringUtils.isBlank(verifyCode)) {
+            return null;
+        }
+
+        TicketMailReaderService.MailReadResult result = new TicketMailReaderService.MailReadResult();
+        result.setParsed(true);
+        result.setSubject(mailbox.getLatestMailSubject());
+        result.setFromAddress(mailbox.getLatestMailFrom());
+        result.setReceivedAt(mailbox.getLatestMailReceivedAt());
+        result.setMessageId(mailbox.getLatestMailMessageId());
+        result.setBodyExcerpt(mailbox.getLatestMailExcerpt());
+        if (StringUtils.isNotBlank(activationUrl) && !"verify_code".equals(expectedParseType)) {
+            result.setParseType("activation_url");
+            result.setActivationUrl(activationUrl);
+            result.setVerifyCode(null);
+            result.setMessage("使用邮箱账号池最新激活链接");
+        } else {
+            result.setParseType("verify_code");
+            result.setVerifyCode(verifyCode);
+            result.setActivationUrl(null);
+            result.setMessage("使用邮箱账号池最新验证码");
+        }
+        return result;
+    }
+
+    private void updateAccountLatestMail(Long accountId, TicketMailReaderService.MailReadResult mail) {
+        accountMapper.update(null, new LambdaUpdateWrapper<TicketManagedAccount>()
+            .eq(TicketManagedAccount::getAccountId, accountId)
+            .set(TicketManagedAccount::getLatestVerifyCode, mail.getVerifyCode())
+            .set(TicketManagedAccount::getLatestActivationUrl, mail.getActivationUrl())
+            .set(TicketManagedAccount::getLatestMailSubject, mail.getSubject())
+            .set(TicketManagedAccount::getLatestMailReceivedAt, mail.getReceivedAt())
+            .set(TicketManagedAccount::getLatestMailMessageId, mail.getMessageId()));
     }
 
     private void processRegistrationBatch(Long batchId, TicketPlatformConfig platform, List<Long> phoneIds, Long userId) {
@@ -1280,19 +1498,19 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             }
 
             TicketPhoneNumber phone = account.getPhoneId() == null ? null : phoneMapper.selectById(account.getPhoneId());
-            if (!"registered".equals(account.getAccountStatus())) {
+            if (!List.of("registered", "activated").contains(account.getAccountStatus())) {
                 String message = "账号未注册，不允许登录";
-                upsertLoginDetail(batchId, accountId, platform.getPlatformId(), "failed", message, account.getReqData());
+                upsertLoginDetail(batchId, accountId, platform.getPlatformId(), "failed", message, account.getLoginReqData());
                 return LoginProgress.failed(batchId, platform, account, phone, message);
             }
 
             if (phone == null || !"available".equals(phone.getStatus())) {
                 String message = "号码不可用，不允许登录";
-                upsertLoginDetail(batchId, accountId, platform.getPlatformId(), "failed", message, account.getReqData());
+                upsertLoginDetail(batchId, accountId, platform.getPlatformId(), "failed", message, account.getLoginReqData());
                 return LoginProgress.failed(batchId, platform, account, phone, message);
             }
 
-            upsertLoginDetail(batchId, accountId, platform.getPlatformId(), "processing", "正在登录", account.getReqData());
+            upsertLoginDetail(batchId, accountId, platform.getPlatformId(), "processing", "正在登录", account.getLoginReqData());
             return LoginProgress.processing(batchId, platform, account, phone);
         });
     }
@@ -1308,7 +1526,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             if (result != null && result.isSuccess()) {
                 currentAccount.setLoginStatus("logged_in");
                 currentAccount.setAccountInfo(result.getAccountInfo());
-                currentAccount.setReqData(result.getReqData());
+                currentAccount.setLoginReqData(result.getReqData());
                 currentAccount.setLastLoginTime(new Date());
                 currentAccount.setLastError(null);
                 saveAccount(currentAccount);
@@ -1321,7 +1539,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
                 }
 
                 String message = StringUtils.defaultIfBlank(result.getMessage(), "登录成功");
-                upsertLoginDetail(batchId, currentAccount.getAccountId(), platform.getPlatformId(), "success", message, currentAccount.getReqData());
+                upsertLoginDetail(batchId, currentAccount.getAccountId(), platform.getPlatformId(), "success", message, currentAccount.getLoginReqData());
                 return LoginProgress.success(batchId, platform, currentAccount, phone, message);
             }
 
@@ -1337,7 +1555,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
                 saveRelation(relation);
             }
 
-            upsertLoginDetail(batchId, currentAccount.getAccountId(), platform.getPlatformId(), "failed", error, currentAccount.getReqData());
+            upsertLoginDetail(batchId, currentAccount.getAccountId(), platform.getPlatformId(), "failed", error, currentAccount.getLoginReqData());
             return LoginProgress.failed(batchId, platform, currentAccount, phone, error);
         });
     }
@@ -1640,6 +1858,12 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         if ("disabled".equals(accountStatus)) {
             return "blocked";
         }
+        if ("pending_register".equals(accountStatus)) {
+            return "registering";
+        }
+        if ("pending_activation".equals(accountStatus)) {
+            return "verification_pending";
+        }
         if ("logged_in".equals(loginStatus)) {
             return "logged_in";
         }
@@ -1894,7 +2118,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             if (account != null) {
                 row.setEmail(account.getEmail());
                 row.setAccountInfo(account.getAccountInfo());
-                row.setReqData(account.getReqData());
+                row.setReqData(account.getLoginReqData());
             }
             TicketSaleTask task = taskMap.get(row.getTaskId());
             if (task != null) {
@@ -1925,9 +2149,9 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         }
         boolean hasInvalidAccount = accounts.stream().anyMatch(account ->
             !Objects.equals(account.getPlatformId(), platformId)
-                || !"registered".equals(account.getAccountStatus())
+                || !List.of("registered", "activated").contains(account.getAccountStatus())
                 || !"logged_in".equals(account.getLoginStatus())
-                || StringUtils.isBlank(account.getReqData())
+                || StringUtils.isBlank(account.getLoginReqData())
         );
         if (hasInvalidAccount) {
             throw new ServiceException("只能绑定目标平台下已登录且带会话上下文的账号");
@@ -1964,9 +2188,9 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         }
         return accountMapper.selectByIds(accountIds).stream()
             .filter(account -> Objects.equals(account.getPlatformId(), task.getPlatformId()))
-            .filter(account -> "registered".equals(account.getAccountStatus()))
+            .filter(account -> List.of("registered", "activated").contains(account.getAccountStatus()))
             .filter(account -> "logged_in".equals(account.getLoginStatus()))
-            .filter(account -> StringUtils.isNotBlank(account.getReqData()))
+            .filter(account -> StringUtils.isNotBlank(account.getLoginReqData()))
             .sorted(Comparator.comparing(TicketManagedAccount::getAccountId))
             .toList();
     }
@@ -1996,7 +2220,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
                 request.setAccountId(account.getAccountId());
                 request.setEmail(account.getEmail());
                 request.setAccountInfo(account.getAccountInfo());
-                request.setReqData(account.getReqData());
+                request.setReqData(account.getLoginReqData());
                 request.setPurchaseType(task.getPurchaseType());
                 request.setPurchaseQuantity(task.getPurchaseQuantity());
                 request.setScheduleVersion(defaultScheduleVersion(task.getScheduleVersion()));
@@ -2348,7 +2572,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             progress.phoneId = account == null ? null : account.getPhoneId();
             progress.email = account == null ? null : account.getEmail();
             progress.accountInfo = account == null ? null : account.getAccountInfo();
-            progress.reqData = account == null ? null : account.getReqData();
+            progress.reqData = account == null ? null : account.getLoginReqData();
             progress.phoneNumber = phone == null ? null : phone.getPhoneNumber();
             return progress;
         }
@@ -2559,15 +2783,30 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
     }
 
     private void recordAudit(String moduleName, String actionType, String businessType, String businessKey, String status, String message, Object payload) {
-        TicketAuditEvent auditEvent = new TicketAuditEvent();
-        auditEvent.setModuleName(moduleName);
-        auditEvent.setActionType(actionType);
-        auditEvent.setBusinessType(businessType);
-        auditEvent.setBusinessKey(businessKey);
-        auditEvent.setAuditStatus(status);
-        auditEvent.setMessage(message);
-        auditEvent.setPayload(JSONUtil.toJsonStr(payload));
-        auditEvent.setEventTime(new Date());
-        auditEventMapper.insert(auditEvent);
+        try {
+            TicketAuditEvent auditEvent = new TicketAuditEvent();
+            auditEvent.setModuleName(moduleName);
+            auditEvent.setActionType(actionType);
+            auditEvent.setBusinessType(businessType);
+            auditEvent.setBusinessKey(fitAuditText(businessKey, AUDIT_BUSINESS_KEY_MAX_LENGTH));
+            auditEvent.setAuditStatus(status);
+            auditEvent.setMessage(fitAuditText(message, AUDIT_MESSAGE_MAX_LENGTH));
+            auditEvent.setPayload(JSONUtil.toJsonStr(payload));
+            auditEvent.setEventTime(new Date());
+            auditEventMapper.insert(auditEvent);
+        } catch (Exception ex) {
+            log.warn("ticket audit record failed, module={}, action={}, businessType={}, businessKey={}",
+                moduleName, actionType, businessType, businessKey, ex);
+        }
+    }
+
+    private String fitAuditText(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        if (maxLength <= 3) {
+            return value.substring(0, maxLength);
+        }
+        return value.substring(0, maxLength - 3) + "...";
     }
 }

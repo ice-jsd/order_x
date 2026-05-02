@@ -43,19 +43,19 @@ INSERT INTO `ticket_phone_number` (
   (9200008, '000000', '09012340008', '+81', 'vendor-d', 'available', '跨平台复用号码', 103, 1, NOW(), 1, NOW(), 0);
 
 INSERT INTO `ticket_managed_account` (
-  `account_id`, `tenant_id`, `platform_id`, `phone_id`, `email`, `account_info`, `req_data`, `account_status`, `login_status`,
+  `account_id`, `tenant_id`, `platform_id`, `phone_id`, `email`, `account_info`, `req_data`, `login_req_data`, `account_status`, `login_status`,
   `last_login_time`, `last_error`,
   `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `del_flag`
 ) VALUES
-  (9300001, '000000', 9100001, 9200001, 'mesh-main-001@jp-ticket-mesh.test', '{"nickname":"mesh-main-001","region":"JP"}', '{"sessionId":"sess-demo-001","channel":"email"}', 'registered', 'logged_in',
+  (9300001, '000000', 9100001, 9200001, 'mesh-main-001@jp-ticket-mesh.test', '{"nickname":"mesh-main-001","region":"JP"}', '{"sessionId":"sess-demo-001","channel":"email"}', '{"sessionId":"sess-demo-001","channel":"email"}', 'registered', 'logged_in',
    DATE_SUB(NOW(), INTERVAL 15 MINUTE), NULL, 103, 1, NOW(), 1, NOW(), 0),
-  (9300002, '000000', 9100002, 9200002, 'live-ready-002@live-pass-jp.test', '{"nickname":"live-ready-002","region":"JP"}', '{"channel":"email","retry":0}', 'registered', 'offline',
+  (9300002, '000000', 9100002, 9200002, 'live-ready-002@live-pass-jp.test', '{"nickname":"live-ready-002","region":"JP"}', '{"channel":"email","retry":0}', NULL, 'registered', 'offline',
    DATE_SUB(NOW(), INTERVAL 1 DAY), NULL, 103, 1, NOW(), 1, NOW(), 0),
-  (9300003, '000000', 9100001, 9200003, 'mesh-risk-003@jp-ticket-mesh.test', '{"nickname":"mesh-risk-003","region":"JP"}', '{"channel":"email","risk":"high"}', 'registered', 'login_failed',
+  (9300003, '000000', 9100001, 9200003, 'mesh-risk-003@jp-ticket-mesh.test', '{"nickname":"mesh-risk-003","region":"JP"}', '{"channel":"email","risk":"high"}', NULL, 'registered', 'login_failed',
    DATE_SUB(NOW(), INTERVAL 3 HOUR), '平台返回风控校验失败', 103, 1, NOW(), 1, NOW(), 0),
-  (9300004, '000000', 9100003, 9200006, 'gate-disabled-004@theater-gate.test', '{"nickname":"gate-disabled-004","region":"JP"}', '{"channel":"email","disabled":true}', 'registered', 'offline',
+  (9300004, '000000', 9100003, 9200006, 'gate-disabled-004@theater-gate.test', '{"nickname":"gate-disabled-004","region":"JP"}', '{"channel":"email","disabled":true}', NULL, 'registered', 'offline',
    DATE_SUB(NOW(), INTERVAL 2 DAY), NULL, 103, 1, NOW(), 1, NOW(), 0),
-  (9300005, '000000', 9100002, 9200008, 'live-shared-005@live-pass-jp.test', '{"nickname":"live-shared-005","region":"JP"}', '{"sessionId":"sess-demo-005","channel":"email"}', 'registered', 'logged_in',
+  (9300005, '000000', 9100002, 9200008, 'live-shared-005@live-pass-jp.test', '{"nickname":"live-shared-005","region":"JP"}', '{"sessionId":"sess-demo-005","channel":"email"}', '{"sessionId":"sess-demo-005","channel":"email"}', 'registered', 'logged_in',
    DATE_SUB(NOW(), INTERVAL 5 MINUTE), NULL, 103, 1, NOW(), 1, NOW(), 0);
 
 INSERT INTO `ticket_phone_platform_relation` (

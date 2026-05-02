@@ -116,7 +116,7 @@ const accountTableColumns = computed<DataTableColumns<Api.Ticket.Account>>(() =>
   },
   {
     key: 'reqData',
-    title: '请求上下文',
+    title: '登录上下文',
     align: 'left',
     minWidth: 220,
     render: row => renderTicketJsonSummary(row.reqData, ['channel', 'platformCode', 'sessionToken'])

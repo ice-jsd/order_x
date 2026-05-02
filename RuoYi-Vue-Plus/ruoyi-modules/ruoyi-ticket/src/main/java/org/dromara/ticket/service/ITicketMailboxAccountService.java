@@ -2,6 +2,7 @@ package org.dromara.ticket.service;
 
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.mybatis.core.page.TableDataInfo;
+import org.dromara.ticket.domain.TicketMailboxAccount;
 import org.dromara.ticket.domain.bo.TicketMailboxAccountBo;
 import org.dromara.ticket.domain.bo.TicketMailboxBatchCreateBo;
 import org.dromara.ticket.domain.bo.TicketMailboxMailSyncBo;
@@ -14,6 +15,8 @@ public interface ITicketMailboxAccountService {
     TableDataInfo<TicketMailboxAccountVo> selectMailboxPage(TicketMailboxAccountBo bo, PageQuery pageQuery);
 
     TicketMailboxBatchCreateResultVo batchCreate(TicketMailboxBatchCreateBo bo);
+
+    TicketMailboxAccount createAvailableMailbox();
 
     boolean changeStatus(TicketMailboxStatusBo bo);
 

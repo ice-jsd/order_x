@@ -22,7 +22,7 @@ server:
 
 captcha:
   # 是否启用验证码校验
-  enable: true
+  enable: false
   # 验证码类型 math 数组计算 char 字符验证
   type: math
   # 数字验证码位数
@@ -266,11 +266,19 @@ websocket:
       auto-warmup-lead-ms: 3000
     mail-reader:
       enabled: true
-      host: "mail.orderx.top"
+      host: "mail.gjcytech.com"
       port: 993
       username: "orderx_admin"
       password: "admin@orderx.top"
       folder: "INBOX"
+      folders:
+        - "INBOX"
+        - "Trash"
+        - "Junk"
+        - "Spam"
+        - "Junk Mail"
+        - "Deleted Items"
+      scan-all-folders: true
       max-scan-count: 50
       connect-timeout-ms: 30000
       read-timeout-ms: 60000
@@ -281,13 +289,22 @@ websocket:
       body-excerpt-length: 1000
     stalwart:
       enabled: true
-      base-url: "https://mail.orderx.top:9443"
+      base-url: "https://mail.gjcytech.com:9443"
       api-key: "api_Zm9yYWRtaW46bEJ6R1U5Z2FuYzdINVRsbW1PMVlWVllIbDU3aGc2"
-      domain: "orderx.top"
+      domain: "gjcytech.com"
       connect-timeout-ms: 10000
       read-timeout-ms: 30000
       ssl-trust-all: true
       max-create-attempt-factor: 5
+    sms-provider:
+      enabled: true
+      base-url: "http://smsrv.itourbag.com:8092"
+      api-key: "vrUzE0FCNuR1NeEQ"
+      api-secret: "DYu1&FeFZCap3hhlDifRwMGA"
+      equipno: "2"
+      appid: "100031"
+      connect-timeout-ms: 10000
+      read-timeout-ms: 30000
 
 --- # warm-flow工作流配置
 warm-flow:

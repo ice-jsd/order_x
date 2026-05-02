@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/business/auth';
 import { defaultTransform, useNaivePaginatedTable } from '@/hooks/common/table';
 import {
   fetchCreateTicketAccount,
+  fetchDeleteTicketAccounts,
   fetchGetTicketAccountList,
   fetchGetTicketBindablePhoneList,
   fetchGetTicketPlatformList,
@@ -34,6 +35,7 @@ interface AccountFormModel {
   email: string;
   accountInfo: string;
   reqData: string;
+  loginReqData: string;
   accountStatus: string;
   loginStatus: string;
   lastError: string;
@@ -66,6 +68,7 @@ function createFormModel(): AccountFormModel {
     email: '',
     accountInfo: '',
     reqData: '',
+    loginReqData: '',
     accountStatus: 'registered',
     loginStatus: 'offline',
     lastError: ''
@@ -118,10 +121,17 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
       },
       {
         key: 'reqData',
-        title: '请求上下文',
+        title: '注册上下文',
         align: 'center',
         minWidth: 200,
-        render: row => renderTicketJsonSummary(row.reqData, ['platformCode', 'channel', 'phoneNumber', 'sessionId'])
+        render: row => renderTicketJsonSummary(row.reqData, ['phoneNumber', 'smsEquipno', 'phoneLeaseExpireTime'])
+      },
+      {
+        key: 'loginReqData',
+        title: '登录上下文',
+        align: 'center',
+        minWidth: 200,
+        render: row => renderTicketJsonSummary(row.loginReqData, ['cookie', 'cookies', 'sessionToken', 'userAgent'])
       },
       {
         key: 'accountStatus',
@@ -218,6 +228,7 @@ function handleEdit(row: Api.Ticket.Account) {
     email: row.email || '',
     accountInfo: row.accountInfo || '',
     reqData: row.reqData || '',
+    loginReqData: row.loginReqData || '',
     accountStatus: row.accountStatus || 'registered',
     loginStatus: row.loginStatus || 'offline',
     lastError: row.lastError || ''
@@ -273,7 +284,11 @@ async function handleSubmit() {
     window.$message?.warning('请输入邮箱');
     return;
   }
-  if (!validateJsonText('账号信息', formModel.value.accountInfo) || !validateJsonText('请求上下文', formModel.value.reqData)) {
+  if (
+    !validateJsonText('账号信息', formModel.value.accountInfo) ||
+    !validateJsonText('注册上下文', formModel.value.reqData) ||
+    !validateJsonText('登录上下文', formModel.value.loginReqData)
+  ) {
     return;
   }
 
@@ -286,6 +301,7 @@ async function handleSubmit() {
     email: formModel.value.email.trim(),
     accountInfo: formModel.value.accountInfo.trim(),
     reqData: formModel.value.reqData.trim(),
+    loginReqData: formModel.value.loginReqData.trim(),
     accountStatus: formModel.value.accountStatus,
     loginStatus: formModel.value.loginStatus,
     lastError: formModel.value.lastError.trim()
@@ -299,6 +315,19 @@ async function handleSubmit() {
   modalVisible.value = false;
   await getData();
 }
+
+async function handleBatchDelete() {
+  if (checkedRowKeys.value.length === 0) {
+    window.$message?.warning('请选择需要删除的账号');
+    return;
+  }
+  const { error } = await fetchDeleteTicketAccounts(checkedRowKeys.value);
+  if (error) return;
+  window.$message?.success('账号已删除');
+  checkedRowKeys.value = [];
+  await getData();
+}
+
 function resetSearch() {
   searchParams.value = createSearchParams();
   checkedRowKeys.value = [];
@@ -381,8 +410,10 @@ onMounted(() => {
           v-model:columns="columnChecks"
           :loading="loading"
           :show-add="hasAuth('ticket:account:add')"
-          :show-delete="false"
+          :show-delete="hasAuth('ticket:account:remove')"
+          :disabled-delete="checkedRowKeys.length === 0"
           @add="openAdd"
+          @delete="handleBatchDelete"
           @refresh="getData"
         />
       </template>
@@ -460,12 +491,20 @@ onMounted(() => {
               placeholder='可选，填写 JSON，例如 {"nickname":"demo-account"}'
             />
           </NFormItemGi>
-          <NFormItemGi :span="24" label="请求上下文">
+          <NFormItemGi :span="24" label="注册上下文">
             <NInput
               v-model:value="formModel.reqData"
               type="textarea"
               :rows="4"
-              placeholder='可选，填写 JSON，例如 {"channel":"email"}'
+              placeholder='可选，填写 JSON，例如 {"phoneNumber":"080..."}'
+            />
+          </NFormItemGi>
+          <NFormItemGi :span="24" label="登录上下文">
+            <NInput
+              v-model:value="formModel.loginReqData"
+              type="textarea"
+              :rows="4"
+              placeholder='可选，填写 JSON，例如 {"sessionToken":"xxx","userAgent":"Mozilla/5.0"}'
             />
           </NFormItemGi>
           <NFormItemGi v-if="operateType === 'edit'" :span="24" label="最近错误">

@@ -26,6 +26,7 @@ public class TicketManagedAccount extends TenantEntity {
     private String email;
     private String accountInfo;
     private String reqData;
+    private String loginReqData;
     private String accountStatus;
     private String loginStatus;
     private Date lastLoginTime;

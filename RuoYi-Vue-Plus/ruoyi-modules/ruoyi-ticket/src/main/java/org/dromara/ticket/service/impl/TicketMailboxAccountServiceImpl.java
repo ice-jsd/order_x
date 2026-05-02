@@ -28,6 +28,8 @@ import org.dromara.ticket.service.TicketMailReaderService;
 import org.dromara.ticket.service.TicketStalwartClient;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.util.Date;
@@ -84,18 +86,7 @@ public class TicketMailboxAccountServiceImpl implements ITicketMailboxAccountSer
             }
 
             try {
-                String username = localPart(email);
-                TicketStalwartClient.CreatePrincipalResult createResult = stalwartClient.createMailboxAccount(username, email);
-                TicketMailboxAccount mailbox = new TicketMailboxAccount();
-                mailbox.setEmail(email);
-                mailbox.setUsername(username);
-                mailbox.setPassword(email);
-                mailbox.setDomain(stalwartProperties.getDomain());
-                mailbox.setProvider("stalwart");
-                mailbox.setStalwartPrincipalId(createResult.getPrincipalId());
-                mailbox.setStatus("available");
-                mailbox.setLastError(null);
-                mailboxMapper.insert(mailbox);
+                createMailbox(email);
 
                 result.setSuccessCount(result.getSuccessCount() + 1);
                 result.getCreatedEmails().add(email);
@@ -111,6 +102,27 @@ public class TicketMailboxAccountServiceImpl implements ITicketMailboxAccountSer
             result.getFailedMessages().add("达到最大尝试次数，仍缺少 " + (requestedCount - result.getSuccessCount()) + " 个邮箱");
         }
         return result;
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
+    public TicketMailboxAccount createAvailableMailbox() {
+        int maxAttempts = Math.max(1, stalwartProperties.getMaxCreateAttemptFactor());
+        Exception lastException = null;
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
+            String email = generateEmail();
+            if (existsEmail(email)) {
+                continue;
+            }
+            try {
+                return createMailbox(email);
+            } catch (Exception ex) {
+                lastException = ex;
+                log.warn("create single mailbox account failed, email={}", email, ex);
+            }
+        }
+        String message = lastException == null ? "邮箱账号创建失败，请稍后重试" : lastException.getMessage();
+        throw new ServiceException("邮箱账号池无可用邮箱，自动创建失败：" + message);
     }
 
     @Override
@@ -187,7 +199,7 @@ public class TicketMailboxAccountServiceImpl implements ITicketMailboxAccountSer
         for (int i = 0; i < 6; i++) {
             builder.append(EMAIL_NAME_CHARS[secureRandom.nextInt(EMAIL_NAME_CHARS.length)]);
         }
-        return builder + "@" + StrUtil.blankToDefault(stalwartProperties.getDomain(), "orderx.top");
+        return builder + "@" + StrUtil.blankToDefault(stalwartProperties.getDomain(), "gjcytech.com");
     }
 
     private String localPart(String email) {
@@ -198,6 +210,22 @@ public class TicketMailboxAccountServiceImpl implements ITicketMailboxAccountSer
         Long count = mailboxMapper.selectCount(new LambdaQueryWrapper<TicketMailboxAccount>()
             .eq(TicketMailboxAccount::getEmail, email));
         return count != null && count > 0;
+    }
+
+    private TicketMailboxAccount createMailbox(String email) {
+        String username = localPart(email);
+        TicketStalwartClient.CreatePrincipalResult createResult = stalwartClient.createMailboxAccount(username, email);
+        TicketMailboxAccount mailbox = new TicketMailboxAccount();
+        mailbox.setEmail(email);
+        mailbox.setUsername(username);
+        mailbox.setPassword(email);
+        mailbox.setDomain(stalwartProperties.getDomain());
+        mailbox.setProvider("stalwart");
+        mailbox.setStalwartPrincipalId(createResult.getPrincipalId());
+        mailbox.setStatus("available");
+        mailbox.setLastError(null);
+        mailboxMapper.insert(mailbox);
+        return mailbox;
     }
 
     private void syncLatestMailInternal(TicketMailboxAccount mailbox, boolean rethrow) {
