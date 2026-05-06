@@ -7,6 +7,7 @@ import time
 import re
 import uuid
 import random
+from datetime import datetime
 from urllib.parse import urlencode, quote
 
 
@@ -98,6 +99,44 @@ class LivePocketLogin:
             'Sec-Fetch-Site': 'same-origin',
             'Sec-Fetch-User': '?1'
         })
+
+    def export_login_context(self):
+        """导出当前 Session 的完整登录上下文。
+
+        数据只来自 auto-py 当前 requests.Session：
+        - cookiesJson/cookies: 程序读取用
+        - cookieHeader: curl -b 可直接使用的字符串
+        - headers/userAgent: 当前 Session 请求头快照
+        """
+        cookies = []
+        cookie_dict = {}
+        cookie_pairs = []
+
+        for cookie in self.session.cookies:
+            cookie_item = {
+                'name': cookie.name,
+                'value': cookie.value,
+                'domain': cookie.domain,
+                'path': cookie.path or '/',
+                'secure': bool(cookie.secure),
+                'expires': cookie.expires
+            }
+            cookies.append(cookie_item)
+            cookie_dict[cookie.name] = cookie.value
+            cookie_pairs.append(f'{cookie.name}={cookie.value}')
+
+        headers = dict(self.session.headers)
+
+        return {
+            'format': 'auto-py-livepocket-login-context-v1',
+            'exportedAt': datetime.now().isoformat(timespec='seconds'),
+            'loginUrl': self.login_url,
+            'userAgent': headers.get('User-Agent', ''),
+            'headers': headers,
+            'cookies': cookies,
+            'cookiesJson': cookie_dict,
+            'cookieHeader': '; '.join(cookie_pairs)
+        }
 
     def get_authenticity_token(self):
         """获取登录页面的 CSRF token"""

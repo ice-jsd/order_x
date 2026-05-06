@@ -82,20 +82,26 @@ class CompleteLoginFlow:
         print(f"[Step 3] 验证码获取失败，已重试 {max_retries} 次")
         return None
 
-    def sure_login(self, email, cookies_dict=None):
+    def sure_login(self, email, login_context=None):
         """确认登录成功"""
         print(f"[Step 5] 确认登录成功: {email}")
 
         import json
-        cookies_json = json.dumps(cookies_dict) if cookies_dict else ""
-        print(f"[Step 5] Cookies JSON: {cookies_json}")
+        login_context_json = json.dumps(login_context, ensure_ascii=False) if login_context else ""
+        cookie_header = login_context.get('cookieHeader', '') if login_context else ''
+
+        print("[Step 5] 登录上下文 JSON:")
+        print(login_context_json)
+        print()
+        print("[Step 5] Cookie Header:")
+        print(cookie_header)
 
         url = f"{self.base_url}/login-success"
         headers = {"Content-Type": "application/json"}
         data = {
             "platformCode": self.platform_code,
             "email": email,
-            "loginReqData": cookies_json
+            "loginReqData": login_context_json
         }
 
         try:
@@ -143,9 +149,8 @@ class CompleteLoginFlow:
         else:
             # 登录成功，直接跳过验证码步骤
             print("[Step 2] 登录成功，无需邮件验证")
-            cookies_dict = dict(self.login_client.session.cookies)
-            print(f"[Step 2] 所有 Cookies: {cookies_dict}")
-            return self.sure_login(email, cookies_dict)
+            login_context = self.login_client.export_login_context()
+            return self.sure_login(email, login_context)
 
         # Step 3: 获取邮件验证码
         verify_code = self.get_auth_code(email)
@@ -162,9 +167,8 @@ class CompleteLoginFlow:
             return False
 
         # Step 5: 确认登录成功
-        cookies_dict = dict(self.login_client.session.cookies)
-        print(f"[Step 4] 所有 Cookies: {cookies_dict}")
-        final_success = self.sure_login(email, cookies_dict)
+        login_context = self.login_client.export_login_context()
+        final_success = self.sure_login(email, login_context)
 
         if final_success:
             print("\n========== 登录流程完成 ==========\n")
@@ -223,8 +227,8 @@ def main():
                     if verify_code:
                         code_success = login_flow.login_client.submit_email_code(verify_code)
                         if code_success:
-                            cookies_dict = dict(login_flow.login_client.session.cookies)
-                            if login_flow.sure_login(email, cookies_dict):
+                            login_context = login_flow.login_client.export_login_context()
+                            if login_flow.sure_login(email, login_context):
                                 print("✓ 登录成功")
                                 success_count += 1
                             else:
@@ -240,8 +244,8 @@ def main():
                     print("✗ 登录失败")
                     fail_count += 1
             else:
-                cookies_dict = dict(login_flow.login_client.session.cookies)
-                if login_flow.sure_login(email, cookies_dict):
+                login_context = login_flow.login_client.export_login_context()
+                if login_flow.sure_login(email, login_context):
                     print("✓ 登录成功")
                     success_count += 1
                 else:

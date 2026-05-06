@@ -46,6 +46,8 @@ import java.util.stream.Collectors;
 public class TicketMailboxAccountServiceImpl implements ITicketMailboxAccountService {
 
     private static final char[] EMAIL_NAME_CHARS = "0123456789abcdefghijklmnopqrstuvwxyz".toCharArray();
+    private static final int EMAIL_NAME_MIN_LENGTH = 6;
+    private static final int EMAIL_NAME_MAX_LENGTH = 10;
     private static final Set<String> SWITCHABLE_STATUSES = Set.of("available", "disabled");
 
     private final TicketMailboxAccountMapper mailboxMapper;
@@ -195,8 +197,9 @@ public class TicketMailboxAccountServiceImpl implements ITicketMailboxAccountSer
     }
 
     private String generateEmail() {
-        StringBuilder builder = new StringBuilder(6);
-        for (int i = 0; i < 6; i++) {
+        int length = EMAIL_NAME_MIN_LENGTH + secureRandom.nextInt(EMAIL_NAME_MAX_LENGTH - EMAIL_NAME_MIN_LENGTH + 1);
+        StringBuilder builder = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
             builder.append(EMAIL_NAME_CHARS[secureRandom.nextInt(EMAIL_NAME_CHARS.length)]);
         }
         return builder + "@" + StrUtil.blankToDefault(stalwartProperties.getDomain(), "gjcytech.com");

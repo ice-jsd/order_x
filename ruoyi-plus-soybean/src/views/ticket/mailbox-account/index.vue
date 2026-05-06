@@ -434,7 +434,7 @@ void getData();
 
     <NModal v-model:show="createModalVisible" preset="card" title="批量创建邮箱账号" class="w-520px">
       <NAlert type="info" :show-icon="false" class="mb-16px">
-        系统会随机生成 6 位数字和小写字母组成的邮箱，用户名和密码默认都等于邮箱地址。
+        系统会随机生成 6-10 位数字和小写字母组成的邮箱前缀，用户名为前缀，密码为完整邮箱地址。
       </NAlert>
       <NForm label-placement="top">
         <NFormItem label="创建数量">

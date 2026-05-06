@@ -55,11 +55,19 @@ public class TicketMailReaderService {
         return readLatestForMailbox(username, password, PARSE_TYPE_VERIFY_CODE, "邮箱没有验证码邮件");
     }
 
+    public MailReadResult readLatestVerifyCodeForMailbox(String username, String password, Date minReceivedAt) {
+        return readLatestForMailbox(username, password, PARSE_TYPE_VERIFY_CODE, "验证码未收到，请稍后重试", minReceivedAt);
+    }
+
     public MailReadResult readLatestActivationUrlForMailbox(String username, String password) {
         return readLatestForMailbox(username, password, PARSE_TYPE_ACTIVATION_URL, "邮箱没有激活链接邮件");
     }
 
     private MailReadResult readLatestForMailbox(String username, String password, String expectedParseType, String notFoundMessage) {
+        return readLatestForMailbox(username, password, expectedParseType, notFoundMessage, null);
+    }
+
+    private MailReadResult readLatestForMailbox(String username, String password, String expectedParseType, String notFoundMessage, Date minReceivedAt) {
         if (!properties.isEnabled()) {
             throw new ServiceException("邮箱读取功能未启用");
         }
@@ -76,7 +84,7 @@ public class TicketMailReaderService {
 
             MailReadResult latestResult = null;
             for (String folderName : resolveFolderNames(store)) {
-                MailReadResult folderResult = readLatestFromFolder(store, folderName, expectedParseType);
+                MailReadResult folderResult = readLatestFromFolder(store, folderName, expectedParseType, minReceivedAt);
                 latestResult = pickLatest(latestResult, folderResult);
             }
             if (latestResult != null) {
@@ -146,7 +154,7 @@ public class TicketMailReaderService {
         }
     }
 
-    private MailReadResult readLatestFromFolder(Store store, String folderName, String expectedParseType) throws Exception {
+    private MailReadResult readLatestFromFolder(Store store, String folderName, String expectedParseType, Date minReceivedAt) throws Exception {
         Folder folder = null;
         try {
             folder = store.getFolder(folderName);
@@ -162,7 +170,12 @@ public class TicketMailReaderService {
             }
             int start = Math.max(1, count - Math.max(1, properties.getMaxScanCount()) + 1);
             for (int index = count; index >= start; index--) {
-                MailReadResult result = parseMatchedMessage(folder.getMessage(index), folderName);
+                Message message = folder.getMessage(index);
+                Date receivedAt = message.getReceivedDate();
+                if (minReceivedAt != null && (receivedAt == null || receivedAt.before(minReceivedAt))) {
+                    continue;
+                }
+                MailReadResult result = parseMatchedMessage(message, folderName);
                 if (StringUtils.isBlank(expectedParseType) || expectedParseType.equals(result.getParseType())) {
                     return result;
                 }

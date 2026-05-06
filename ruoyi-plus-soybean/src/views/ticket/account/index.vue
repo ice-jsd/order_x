@@ -1,6 +1,6 @@
 <script setup lang="tsx">
-import { computed, onMounted, ref, watch } from 'vue';
-import { NButton } from 'naive-ui';
+import { computed, h, onMounted, ref, watch } from 'vue';
+import { NButton, NPopover } from 'naive-ui';
 import { useAuth } from '@/hooks/business/auth';
 import { defaultTransform, useNaivePaginatedTable } from '@/hooks/common/table';
 import {
@@ -129,9 +129,9 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
       {
         key: 'loginReqData',
         title: '登录上下文',
-        align: 'center',
-        minWidth: 200,
-        render: row => renderTicketJsonSummary(row.loginReqData, ['cookie', 'cookies', 'sessionToken', 'userAgent'])
+        align: 'left',
+        width: 180,
+        render: row => renderLoginReqDataSummary(row.loginReqData)
       },
       {
         key: 'accountStatus',
@@ -173,6 +173,97 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
       }
     ]
   });
+
+function maskLongText(value: string, head = 10, tail = 4) {
+  if (!value) return '-';
+  if (value.length <= head + tail + 3) return value;
+  return `${value.slice(0, head)}...${value.slice(-tail)}`;
+}
+
+function summarizeCookieHeader(header: string) {
+  const pairs = header
+    .split(';')
+    .map(item => item.trim())
+    .filter(Boolean)
+    .map(item => {
+      const [name, ...rest] = item.split('=');
+      return { name: name.trim(), value: rest.join('=').trim() };
+    })
+    .filter(item => item.name && item.value);
+
+  if (!pairs.length) return '';
+
+  const preferred = ['_session', 'reauth', 'lptlvt', 'aws-waf-token'];
+  const picked = preferred.map(name => pairs.find(item => item.name === name)).find(Boolean) || pairs[0];
+
+  return `${pairs.length} cookies · ${picked?.name}: ${maskLongText(picked?.value || '')}`;
+}
+
+function renderLoginReqDataSummary(value?: string | null) {
+  if (!value) return '-';
+
+  let detail = value;
+  let summary = '';
+
+  try {
+    const parsed = JSON.parse(value) as Record<string, any>;
+    detail = JSON.stringify(parsed, null, 2);
+
+    if (typeof parsed.cookieHeader === 'string' && parsed.cookieHeader) {
+      summary = summarizeCookieHeader(parsed.cookieHeader);
+    } else if (Array.isArray(parsed.cookies)) {
+      const sessionCookie = parsed.cookies.find((item: any) => item?.name === '_session') || parsed.cookies[0];
+      summary = `${parsed.cookies.length} cookies`;
+      if (sessionCookie?.name && sessionCookie?.value) {
+        summary += ` · ${sessionCookie.name}: ${maskLongText(String(sessionCookie.value))}`;
+      }
+    } else if (typeof parsed.userAgent === 'string' && parsed.userAgent) {
+      summary = `UA · ${maskLongText(parsed.userAgent, 18, 0)}`;
+    }
+  } catch {
+    summary = summarizeCookieHeader(value) || maskLongText(value, 16, 6);
+  }
+
+  summary = summary || '查看登录上下文';
+
+  return h(
+    NPopover,
+    { trigger: 'hover', placement: 'left', width: 460 },
+    {
+      trigger: () =>
+        h(
+          'div',
+          {
+            class: 'w-160px cursor-help text-left'
+          },
+          [
+            h(
+              'div',
+              {
+                class: 'truncate text-12px leading-18px text-text-2'
+              },
+              summary
+            ),
+            h(
+              'div',
+              {
+                class: 'text-12px leading-18px text-text-3'
+              },
+              '悬浮查看完整内容'
+            )
+          ]
+        ),
+      default: () =>
+        h(
+          'pre',
+          {
+            class: 'max-h-420px max-w-420px overflow-auto whitespace-pre-wrap break-all rounded-8px bg-#f6f8fb p-12px text-12px leading-18px text-#334155'
+          },
+          detail
+        )
+    }
+  );
+}
 
 const modalTitle = computed(() => (operateType.value === 'add' ? '新增账号' : '编辑账号'));
 

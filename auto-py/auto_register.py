@@ -129,14 +129,13 @@ def register_one_account():
         api_key='CAP-200B6FC092214F1DDA9344DC2361E799BB8B822BA24E438BC458A933290A2DDC'
     )
     register = LivePocketRegister(captcha_solver, use_proxy=False)
-
-    # 步骤3: 执行注册
-    print("\n[3] 开始注册...")
+    livepocket_last_name = f"{register_data['familyName']} {register_data['givenName']}"
+    livepocket_first_name = "⁠⁣"
     success = register.register(
         email=register_data['email'],
         password=register_data['password'],
-        last_name=register_data['familyName'],
-        first_name=register_data['givenName'],
+        last_name=livepocket_last_name,
+        first_name=livepocket_first_name,
         phone_number=register_data['phoneNumber'],
         sex=convert_gender(register_data['gender']),
         birthday=format_birthday(

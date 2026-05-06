@@ -34,6 +34,10 @@ class LivePocketRegister:
         """执行注册 - 模仿登录的两次POST"""
         print("=" * 60)
         print("Starting registration (two-step POST)...")
+
+        print(f"  - 姓: {last_name}")
+        print(f"  - 名: {first_name}")
+
         print("=" * 60)
 
         # 步骤1: 获取注册页面token

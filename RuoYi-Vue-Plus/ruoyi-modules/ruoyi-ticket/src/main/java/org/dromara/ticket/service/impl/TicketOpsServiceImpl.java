@@ -60,6 +60,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
     private static final Set<String> EXECUTION_FAILURE_STATUSES = Set.of("failed", "blocked", "timeout");
     private static final int AUDIT_BUSINESS_KEY_MAX_LENGTH = 128;
     private static final int AUDIT_MESSAGE_MAX_LENGTH = 500;
+    private static final long EMAIL_VERIFY_TIME_DRIFT_MILLIS = 30_000L;
 
     private final TicketPlatformConfigMapper platformMapper;
     private final TicketPhoneNumberMapper phoneMapper;
@@ -1111,6 +1112,10 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             return R.fail("没有需要登录的账号");
         }
 
+        accountMapper.update(null, Wrappers.lambdaUpdate(TicketManagedAccount.class)
+            .eq(TicketManagedAccount::getAccountId, account.getAccountId())
+            .set(TicketManagedAccount::getUpdateTime, new Date()));
+
         TicketExternalOfflineAccountVo vo = new TicketExternalOfflineAccountVo();
         vo.setEmail(account.getEmail());
         vo.setPassword(password);
@@ -1183,17 +1188,18 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         if (mailbox == null) {
             return R.fail("邮箱账号池不存在该邮箱: " + account.getEmail());
         }
+        Date minReceivedAt = "verify_code".equals(expectedParseType) ? resolveEmailVerifyMinReceivedAt(account) : null;
 
         TicketMailReaderService.MailReadResult mail;
         if (mailbox != null) {
             try {
                 mail = switch (StringUtils.blankToDefault(expectedParseType, "")) {
-                    case "verify_code" -> ticketMailReaderService.readLatestVerifyCodeForMailbox(mailbox.getUsername(), mailbox.getPassword());
+                    case "verify_code" -> ticketMailReaderService.readLatestVerifyCodeForMailbox(mailbox.getUsername(), mailbox.getPassword(), minReceivedAt);
                     case "activation_url" -> ticketMailReaderService.readLatestActivationUrlForMailbox(mailbox.getUsername(), mailbox.getPassword());
                     default -> ticketMailReaderService.readLatestForMailbox(mailbox.getUsername(), mailbox.getPassword());
                 };
             } catch (ServiceException e) {
-                mail = readCachedMailboxEmailResult(mailbox, expectedParseType);
+                mail = readCachedMailboxEmailResult(mailbox, expectedParseType, minReceivedAt);
                 if (mail == null) {
                     return R.fail(e.getMessage());
                 }
@@ -1203,7 +1209,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
         }
 
         if (!mail.isParsed()) {
-            TicketMailReaderService.MailReadResult cachedMail = readCachedMailboxEmailResult(mailbox, expectedParseType);
+            TicketMailReaderService.MailReadResult cachedMail = readCachedMailboxEmailResult(mailbox, expectedParseType, minReceivedAt);
             if (cachedMail != null) {
                 mail = cachedMail;
             }
@@ -1237,7 +1243,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             .last("limit 1"));
     }
 
-    private TicketMailReaderService.MailReadResult readCachedMailboxEmailResult(TicketMailboxAccount mailbox, String expectedParseType) {
+    private TicketMailReaderService.MailReadResult readCachedMailboxEmailResult(TicketMailboxAccount mailbox, String expectedParseType, Date minReceivedAt) {
         if (mailbox == null) {
             return null;
         }
@@ -1251,6 +1257,9 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             return null;
         }
         if (StringUtils.isBlank(expectedParseType) && StringUtils.isBlank(activationUrl) && StringUtils.isBlank(verifyCode)) {
+            return null;
+        }
+        if (minReceivedAt != null && (mailbox.getLatestMailReceivedAt() == null || mailbox.getLatestMailReceivedAt().before(minReceivedAt))) {
             return null;
         }
 
@@ -1273,6 +1282,27 @@ public class TicketOpsServiceImpl implements ITicketOpsService {
             result.setMessage("使用邮箱账号池最新验证码");
         }
         return result;
+    }
+
+    private Date resolveEmailVerifyMinReceivedAt(TicketManagedAccount account) {
+        Date baseTime = null;
+        if (account != null) {
+            baseTime = latestDate(account.getLastLoginTime(), account.getUpdateTime());
+        }
+        if (baseTime == null) {
+            return null;
+        }
+        return new Date(Math.max(0L, baseTime.getTime() - EMAIL_VERIFY_TIME_DRIFT_MILLIS));
+    }
+
+    private Date latestDate(Date left, Date right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null) {
+            return left;
+        }
+        return right.after(left) ? right : left;
     }
 
     private void updateAccountLatestMail(Long accountId, TicketMailReaderService.MailReadResult mail) {
