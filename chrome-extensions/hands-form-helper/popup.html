@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>表单抽票助手</title>
+    <style>
+      :root {
+        --paper: #f3eee6;
+        --paper-strong: #fbf7f0;
+        --surface: rgba(255, 251, 245, 0.84);
+        --surface-strong: rgba(255, 255, 255, 0.92);
+        --ink: #16120d;
+        --ink-soft: #6a6157;
+        --line: rgba(22, 18, 13, 0.12);
+        --line-strong: rgba(22, 18, 13, 0.18);
+        --accent: #a94c2f;
+        --accent-strong: #7d2e1d;
+        --accent-soft: rgba(169, 76, 47, 0.12);
+        --success: #24523f;
+        --success-soft: rgba(36, 82, 63, 0.14);
+        --warning: #8a6229;
+        --warning-soft: rgba(138, 98, 41, 0.14);
+        --danger: #8f2e23;
+        --danger-soft: rgba(143, 46, 35, 0.14);
+        --shadow: 0 28px 72px rgba(31, 20, 10, 0.18);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        width: 408px;
+        min-height: 608px;
+        color: var(--ink);
+        font-family: "Segoe UI Variable", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(255, 210, 166, 0.34), transparent 30%),
+          radial-gradient(circle at 85% 20%, rgba(166, 84, 58, 0.14), transparent 24%),
+          linear-gradient(180deg, #f7f1e8 0%, #ece3d6 100%);
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background:
+          linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 42%),
+          radial-gradient(circle at center, rgba(255, 255, 255, 0.08) 0, transparent 58%);
+        pointer-events: none;
+        opacity: 0.6;
+      }
+
+      .shell {
+        position: relative;
+        padding: 14px;
+      }
+
+      .panel {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(22, 18, 13, 0.08);
+        border-radius: 30px;
+        background:
+          linear-gradient(180deg, rgba(255, 252, 246, 0.94) 0%, rgba(247, 240, 230, 0.94) 100%);
+        box-shadow: var(--shadow);
+      }
+
+      .panel::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at top right, rgba(180, 107, 79, 0.08), transparent 30%),
+          linear-gradient(180deg, transparent 0%, rgba(22, 18, 13, 0.03) 100%);
+        pointer-events: none;
+      }
+
+      .masthead {
+        position: relative;
+        padding: 20px 22px 18px;
+        border-bottom: 1px solid rgba(22, 18, 13, 0.08);
+        background:
+          linear-gradient(180deg, rgba(16, 13, 10, 0.96) 0%, rgba(28, 22, 18, 0.92) 100%);
+        color: #f6efe5;
+      }
+
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+      }
+
+      .eyebrow-left {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .signal {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow: 0 0 0 0 rgba(160, 59, 40, 0.32);
+        animation: pulse 2.2s ease-out infinite;
+      }
+
+      .eyebrow-text,
+      .mini-badge {
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      .eyebrow-text {
+        color: rgba(246, 239, 229, 0.68);
+      }
+
+      .mini-badge {
+        padding: 6px 10px;
+        border: 1px solid rgba(246, 239, 229, 0.16);
+        border-radius: 999px;
+        color: rgba(246, 239, 229, 0.8);
+        background: rgba(255, 255, 255, 0.06);
+        backdrop-filter: blur(10px);
+      }
+
+      h1 {
+        margin: 0;
+        font-family: "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+        font-size: 34px;
+        line-height: 0.9;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+      }
+
+      .subtitle {
+        width: 92%;
+        margin: 12px 0 0;
+        color: rgba(246, 239, 229, 0.72);
+        font-size: 12px;
+        line-height: 1.65;
+      }
+
+      .content {
+        position: relative;
+        padding: 18px 22px 18px;
+      }
+
+      .section-label {
+        margin: 0 0 12px;
+        color: var(--ink-soft);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      .field-group + .field-group {
+        margin-top: 12px;
+      }
+
+      label.field-label {
+        display: block;
+        margin: 0 0 6px;
+        color: var(--ink-soft);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .input-shell {
+        position: relative;
+      }
+
+      input[type="text"],
+      input[type="password"],
+      input[type="number"] {
+        width: 100%;
+        height: 48px;
+        border: 1px solid var(--line-strong);
+        border-radius: 16px;
+        outline: none;
+        background: var(--surface-strong);
+        padding: 0 16px;
+        color: var(--ink);
+        font-size: 14px;
+        transition:
+          border-color 160ms ease,
+          box-shadow 160ms ease,
+          transform 160ms ease,
+          background 160ms ease;
+      }
+
+      input[type="text"]:focus,
+      input[type="password"]:focus,
+      input[type="number"]:focus {
+        border-color: rgba(160, 59, 40, 0.4);
+        box-shadow: 0 0 0 4px rgba(160, 59, 40, 0.12);
+        background: rgba(255, 255, 255, 0.98);
+      }
+
+      .split-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-top: 14px;
+      }
+
+      .toggle-block {
+        display: flex;
+        align-items: flex-end;
+      }
+
+      .toggle-card {
+        width: 100%;
+        min-height: 70px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 14px;
+        border: 1px solid var(--line-strong);
+        border-radius: 18px;
+        background: var(--surface);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+      }
+
+      .toggle-card strong {
+        display: block;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .toggle-card span {
+        display: block;
+        margin-top: 2px;
+        color: var(--ink-soft);
+        font-size: 11px;
+      }
+
+      .switch {
+        position: relative;
+        width: 44px;
+        height: 26px;
+        flex: 0 0 auto;
+      }
+
+      .switch input {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+      }
+
+      .switch-track {
+        width: 100%;
+        height: 100%;
+        display: block;
+        border-radius: 999px;
+        background: rgba(24, 21, 18, 0.18);
+        transition: background 180ms ease;
+      }
+
+      .switch-track::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 20px;
+        height: 20px;
+        border-radius: 999px;
+        background: #fffdf8;
+        box-shadow: 0 2px 8px rgba(24, 21, 18, 0.16);
+        transition: transform 180ms ease;
+      }
+
+      .switch input:checked + .switch-track {
+        background: linear-gradient(90deg, var(--accent), #cf6e46);
+      }
+
+      .switch input:checked + .switch-track::after {
+        transform: translateX(18px);
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      button {
+        min-height: 50px;
+        border-radius: 18px;
+        border: 1px solid var(--line-strong);
+        background: transparent;
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        cursor: pointer;
+        transition:
+          transform 160ms ease,
+          box-shadow 160ms ease,
+          background 160ms ease,
+          border-color 160ms ease;
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+      }
+
+      button:active {
+        transform: translateY(0);
+      }
+
+      .primary {
+        border-color: rgba(160, 59, 40, 0.35);
+        background: linear-gradient(180deg, #c96841 0%, #9a3625 100%);
+        color: #fffaf6;
+        box-shadow:
+          0 14px 24px rgba(160, 59, 40, 0.24),
+          inset 0 1px 0 rgba(255, 255, 255, 0.18);
+      }
+
+      .secondary {
+        background: rgba(255, 255, 255, 0.86);
+      }
+
+      .ghost {
+        color: var(--ink-soft);
+        background: rgba(24, 21, 18, 0.04);
+      }
+
+      .status-panel {
+        position: relative;
+        margin-top: 18px;
+        padding: 18px 16px 14px;
+        border-top: 1px solid rgba(22, 18, 13, 0.08);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.22) 100%);
+      }
+
+      .status-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+
+      .status-title {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ink-soft);
+      }
+
+      .status-subtitle {
+        margin-top: 4px;
+        color: rgba(106, 97, 87, 0.86);
+        font-size: 11px;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 28px;
+        padding: 0 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        border: 1px solid transparent;
+      }
+
+      .status-pill::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: currentColor;
+      }
+
+      .status-pill.is-idle {
+        color: var(--warning);
+        background: var(--warning-soft);
+        border-color: rgba(123, 79, 29, 0.18);
+      }
+
+      .status-pill.is-running {
+        color: var(--accent-strong);
+        background: var(--accent-soft);
+        border-color: rgba(160, 59, 40, 0.18);
+      }
+
+      .status-pill.is-success {
+        color: var(--success);
+        background: var(--success-soft);
+        border-color: rgba(37, 85, 62, 0.18);
+      }
+
+      .status-pill.is-failed,
+      .status-pill.is-error {
+        color: var(--danger);
+        background: var(--danger-soft);
+        border-color: rgba(141, 46, 35, 0.18);
+      }
+
+      .status-grid {
+        display: grid;
+        gap: 10px;
+      }
+
+      .status-section + .status-section {
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid rgba(22, 18, 13, 0.08);
+      }
+
+      .stage-card {
+        padding: 15px 16px 14px;
+        border: 1px solid rgba(22, 18, 13, 0.08);
+        border-radius: 20px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(250, 244, 236, 0.92) 100%);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.72),
+          0 10px 24px rgba(31, 20, 10, 0.06);
+      }
+
+      .stage-card.is-success {
+        border-color: rgba(36, 82, 63, 0.16);
+        background:
+          linear-gradient(180deg, rgba(247, 255, 250, 0.96) 0%, rgba(234, 247, 241, 0.92) 100%);
+      }
+
+      .stage-card.is-failed {
+        border-color: rgba(143, 46, 35, 0.16);
+        background:
+          linear-gradient(180deg, rgba(255, 248, 247, 0.96) 0%, rgba(249, 236, 233, 0.92) 100%);
+      }
+
+      .stage-kicker {
+        color: var(--ink-soft);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      .stage-title {
+        margin-top: 8px;
+        font-family: "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+        font-size: 25px;
+        line-height: 1;
+        letter-spacing: -0.04em;
+      }
+
+      .stage-note {
+        margin-top: 8px;
+        color: var(--ink-soft);
+        font-size: 12px;
+        line-height: 1.65;
+      }
+
+      .task-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .task-card {
+        padding: 12px 12px 11px;
+        border: 1px solid rgba(22, 18, 13, 0.08);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.66);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+      }
+
+      .task-card.wide {
+        grid-column: 1 / -1;
+      }
+
+      .task-card-label {
+        color: var(--ink-soft);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .task-card-value {
+        margin-top: 6px;
+        font-size: 13px;
+        line-height: 1.45;
+        word-break: break-word;
+      }
+
+      .task-card-value.code {
+        font-family: "Consolas", "SFMono-Regular", monospace;
+        font-size: 12px;
+      }
+
+      .empty-task {
+        margin-top: 6px;
+        color: rgba(24, 21, 18, 0.58);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .flow-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .flow-step {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr);
+        gap: 10px;
+        align-items: start;
+      }
+
+      .flow-step-index {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        border: 1px solid rgba(22, 18, 13, 0.12);
+        color: rgba(22, 18, 13, 0.42);
+        background: rgba(255, 255, 255, 0.72);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .flow-step-copy {
+        padding-top: 2px;
+      }
+
+      .flow-step-title {
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .flow-step-detail {
+        margin-top: 3px;
+        color: var(--ink-soft);
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
+      .flow-step.is-complete .flow-step-index {
+        border-color: rgba(36, 82, 63, 0.16);
+        background: var(--success-soft);
+        color: var(--success);
+      }
+
+      .flow-step.is-active .flow-step-index {
+        border-color: rgba(160, 59, 40, 0.18);
+        background: var(--accent-soft);
+        color: var(--accent-strong);
+      }
+
+      .flow-step.is-failed .flow-step-index {
+        border-color: rgba(141, 46, 35, 0.18);
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      .flow-step.is-active .flow-step-title,
+      .flow-step.is-complete .flow-step-title {
+        color: var(--ink);
+      }
+
+      .flow-step.is-pending .flow-step-title {
+        color: rgba(22, 18, 13, 0.52);
+      }
+
+      .log-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .log-item {
+        display: grid;
+        grid-template-columns: 58px minmax(0, 1fr);
+        gap: 10px;
+        align-items: start;
+        padding: 9px 10px;
+        border: 1px solid rgba(22, 18, 13, 0.08);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.56);
+      }
+
+      .log-time {
+        color: var(--ink-soft);
+        font-family: "Consolas", "SFMono-Regular", monospace;
+        font-size: 11px;
+      }
+
+      .log-note {
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .status-item {
+        display: grid;
+        gap: 4px;
+      }
+
+      .status-key {
+        color: var(--ink-soft);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .status-value {
+        font-size: 13px;
+        line-height: 1.45;
+        word-break: break-word;
+      }
+
+      .status-value.code {
+        font-family: "Consolas", "SFMono-Regular", monospace;
+        font-size: 12px;
+      }
+
+      .status-value.empty {
+        color: rgba(24, 21, 18, 0.42);
+      }
+
+      .footnote {
+        margin-top: 12px;
+        color: var(--ink-soft);
+        font-size: 11px;
+        line-height: 1.6;
+      }
+
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(160, 59, 40, 0.28);
+        }
+        70% {
+          box-shadow: 0 0 0 11px rgba(160, 59, 40, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(160, 59, 40, 0);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <main class="panel">
+        <header class="masthead">
+          <div class="eyebrow">
+            <div class="eyebrow-left">
+              <span class="signal"></span>
+              <span class="eyebrow-text">本地接力</span>
+            </div>
+            <span class="mini-badge">轮询面板</span>
+          </div>
+          <h1>表单抽票<br />助手</h1>
+          <p class="subtitle">在浏览器里直接接管提交动作，安静地完成领取、填写、确认与结果回写。</p>
+        </header>
+
+        <section class="content">
+          <p class="section-label">连接配置</p>
+
+          <div class="field-group">
+            <label class="field-label" for="backendBaseUrl">后端地址</label>
+            <div class="input-shell">
+              <input id="backendBaseUrl" type="text" />
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="apiSecret">扩展密钥</label>
+            <div class="input-shell">
+              <input id="apiSecret" type="password" />
+            </div>
+          </div>
+
+          <div class="split-row">
+            <div class="field-group">
+              <label class="field-label" for="pollSeconds">轮询间隔</label>
+              <div class="input-shell">
+                <input id="pollSeconds" type="number" min="1" />
+              </div>
+            </div>
+
+            <div class="toggle-block">
+              <div class="toggle-card">
+                <div>
+                  <strong>自动轮询</strong>
+                  <span>空闲时每秒检查，直到没有新任务</span>
+                </div>
+                <label class="switch" aria-label="自动轮询">
+                  <input id="autoPoll" type="checkbox" />
+                  <span class="switch-track"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button id="saveBtn" class="primary">保存配置</button>
+            <button id="claimBtn" class="secondary">领取任务</button>
+            <button id="clearBtn" class="ghost">清任务</button>
+          </div>
+
+          <section class="status-panel">
+            <div id="statusBox">加载中...</div>
+            <p class="footnote">这里只保留任务资料和当前阶段，执行成功或失败都会回写到后台任务记录。</p>
+          </section>
+        </section>
+      </main>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>

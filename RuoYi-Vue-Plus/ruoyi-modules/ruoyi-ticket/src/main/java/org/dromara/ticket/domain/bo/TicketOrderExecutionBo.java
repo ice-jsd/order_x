@@ -15,10 +15,15 @@ public class TicketOrderExecutionBo extends BaseEntity {
 
     private Long executionId;
     private Long taskId;
+    private Long batchTaskId;
     private Long platformId;
     private Long accountId;
+    private String email;
     private String purchaseType;
+    private String lotteryEventUrl;
     private String orderNo;
     private String executionStatus;
     private String paymentStatus;
+    private String lotteryResultStatus;
+    private Boolean excludeCancelled;
 }

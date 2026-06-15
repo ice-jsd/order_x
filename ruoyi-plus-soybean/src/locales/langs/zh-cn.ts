@@ -1275,13 +1275,19 @@ const local = {
 } as unknown as App.I18n.Schema;
 
 local.route.ticket = '票务运营';
-local.route.ticket_platform = '平台接入';
+local.route.ticket_platform = '抢购平台';
+local.route['ticket_registration-batch'] = '执行记录';
 local.route.ticket_phone = '号码池';
 local.route.ticket_account = '账号池';
+local.route['ticket_jump-shop-profile'] = 'Jump Shop 资料';
+local.route['ticket_lottery-batch-task'] = '批量抽票任务';
+local.route['ticket_lottery-account-record'] = '账号抽票记录';
+local.route['ticket_mail-forward'] = '邮件转发记录';
+local.route['ticket_mail-overview'] = '邮件总览';
 local.route['ticket_mailbox-account'] = '邮箱账号池';
 local.route.ticket_event = '活动配置';
-local.route['ticket_sale-task'] = '商品抢购任务';
-local.route['ticket_order-execution'] = '下单执行';
+local.route['ticket_sale-task'] = '任务管理';
+local.route['ticket_order-execution'] = '订单列表';
 local.route['ticket_audit-log'] = '审计中心';
 
 export default local;

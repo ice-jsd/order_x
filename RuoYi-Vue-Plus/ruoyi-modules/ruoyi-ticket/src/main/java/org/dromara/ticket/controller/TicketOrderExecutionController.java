@@ -13,7 +13,9 @@ import org.dromara.ticket.domain.bo.TicketOrderExecutionPaymentBo;
 import org.dromara.ticket.domain.bo.TicketOrderExecutionBo;
 import org.dromara.ticket.domain.vo.TicketOrderExecutionVo;
 import org.dromara.ticket.service.ITicketOpsService;
+import org.dromara.ticket.service.ITicketOrderExecutionRecordService;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class TicketOrderExecutionController extends BaseController {
 
     private final ITicketOpsService ticketOpsService;
+    private final ITicketOrderExecutionRecordService orderExecutionRecordService;
 
     @SaCheckPermission("ticket:orderExecution:list")
     @GetMapping("/list")
@@ -35,11 +38,25 @@ public class TicketOrderExecutionController extends BaseController {
         return ticketOpsService.selectOrderExecutionPage(bo, pageQuery);
     }
 
+    @SaCheckPermission("ticket:orderExecution:list")
+    @GetMapping("/{executionId}")
+    public R<TicketOrderExecutionVo> getInfo(@PathVariable Long executionId) {
+        return R.ok(ticketOpsService.selectOrderExecutionDetail(executionId));
+    }
+
     @SaCheckPermission("ticket:orderExecution:edit")
-    @Log(title = "下单执行", businessType = BusinessType.UPDATE)
+    @Log(title = "订单列表", businessType = BusinessType.UPDATE)
     @RepeatSubmit
     @PostMapping("/{executionId}/mark-paid")
     public R<Void> markPaid(@PathVariable Long executionId, @RequestBody TicketOrderExecutionPaymentBo bo) {
         return toAjax(ticketOpsService.markOrderExecutionPaid(executionId, bo));
+    }
+
+    @SaCheckPermission("ticket:orderExecution:remove")
+    @Log(title = "订单列表", businessType = BusinessType.DELETE)
+    @RepeatSubmit
+    @DeleteMapping("/{executionIds}")
+    public R<Void> remove(@PathVariable Long[] executionIds) {
+        return toAjax(orderExecutionRecordService.removeOrderExecutions(executionIds));
     }
 }

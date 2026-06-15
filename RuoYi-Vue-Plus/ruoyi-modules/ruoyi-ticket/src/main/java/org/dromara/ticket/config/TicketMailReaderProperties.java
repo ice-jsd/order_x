@@ -80,6 +80,52 @@ public class TicketMailReaderProperties {
     private boolean autoSyncEnabled = true;
 
     /**
+     * 是否启用中心邮箱全局同步。启用后自动同步不再逐个邮箱轮询，而是读取中心邮箱副本。
+     */
+    private boolean globalSyncEnabled = false;
+
+    /**
+     * 中心邮箱登录用户名。
+     */
+    private String globalUsername;
+
+    /**
+     * 中心邮箱登录密码。
+     */
+    private String globalPassword;
+
+    /**
+     * 中心邮箱同步间隔。
+     */
+    private long globalSyncFixedDelayMs = 15000L;
+
+    /**
+     * 中心邮箱读取文件夹。正常只需要读取 INBOX。
+     */
+    private List<String> globalFolders = new ArrayList<>(List.of("INBOX"));
+
+    /**
+     * 中心邮箱是否扫描全部文件夹。
+     */
+    private boolean globalScanAllFolders = false;
+
+    /**
+     * 中心邮箱每轮最多扫描多少封最新邮件。
+     */
+    private int globalMaxScanCount = 200;
+
+    /**
+     * 用于识别原始收件人的邮件头，按顺序优先匹配。
+     */
+    private List<String> globalRecipientHeaders = new ArrayList<>(List.of(
+        "X-Stalwart-Original-To",
+        "Delivered-To",
+        "X-Original-To",
+        "Original-Recipient",
+        "Envelope-To"
+    ));
+
+    /**
      * 邮箱账号池自动同步间隔。
      */
     private long syncFixedDelayMs = 120000L;

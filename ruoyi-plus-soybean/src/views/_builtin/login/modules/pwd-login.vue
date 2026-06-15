@@ -33,6 +33,12 @@ const tenantEnabled = ref<boolean>(false);
 
 const tenantOption = ref<SelectOption[]>([]);
 
+type RememberLoginPayload = {
+  tenantId?: string;
+  username?: string;
+  password?: string;
+};
+
 const model: Api.Auth.PwdLoginForm = reactive({
   tenantId: '000000',
   username: 'admin',
@@ -75,10 +81,11 @@ handleFetchTenantList();
 
 async function handleSubmit() {
   await validate();
-  // 只记住租户和账号，密码必须每次手动输入。
+  // 记住租户、账号和密码，便于下次直接登录。
   if (remberMe.value) {
-    const { tenantId, username } = model;
-    localStg.set('loginRember', encryptWithAes(JSON.stringify({ tenantId, username }), aesKey));
+    const { tenantId, username, password } = model;
+    const payload: RememberLoginPayload = { tenantId, username, password };
+    localStg.set('loginRember', encryptWithAes(JSON.stringify(payload), aesKey));
   } else {
     // 否则移除
     localStg.remove('loginRember');
@@ -110,8 +117,8 @@ function handleLoginRember() {
   if (!loginRember) return;
   try {
     remberMe.value = true;
-    const { tenantId, username } = JSON.parse(decryptWithAes(loginRember, aesKey));
-    Object.assign(model, { tenantId, username, password: '' });
+    const { tenantId, username, password }: RememberLoginPayload = JSON.parse(decryptWithAes(loginRember, aesKey));
+    Object.assign(model, { tenantId, username, password: password || '' });
   } catch {}
 }
 
@@ -144,14 +151,14 @@ async function handleSocialLogin(type: Api.System.SocialSource) {
       :show-label="false"
       @keyup.enter="() => !authStore.loginLoading && handleSubmit()"
     >
-      <NFormItem v-if="tenantEnabled" path="tenantId">
-        <NSelect
-          v-model:value="model.tenantId"
-          placeholder="请选择租户"
-          :options="tenantOption"
-          :loading="tenantLoading"
-        />
-      </NFormItem>
+<!--      <NFormItem v-if="tenantEnabled" path="tenantId">-->
+<!--        <NSelect-->
+<!--          v-model:value="model.tenantId"-->
+<!--          placeholder="请选择租户"-->
+<!--          :options="tenantOption"-->
+<!--          :loading="tenantLoading"-->
+<!--        />-->
+<!--      </NFormItem>-->
       <NFormItem path="username">
         <NInput v-model:value="model.username" :placeholder="$t('page.login.common.userNamePlaceholder')" />
       </NFormItem>
@@ -194,27 +201,27 @@ async function handleSocialLogin(type: Api.System.SocialSource) {
       <div class="color-#858585">{{ $t('page.login.pwdLogin.otherAccountLogin') }}</div>
     </NDivider>
 
-    <div class="w-full flex-y-center gap-16px">
-      <NButton class="flex-1" @click="handleSocialLogin('gitee')">
-        <template #icon>
-          <icon-simple-icons-gitee class="color-#c71d23" />
-        </template>
-        <span class="ml-6px">Gitee</span>
-      </NButton>
-      <NButton class="flex-1" @click="handleSocialLogin('github')">
-        <template #icon>
-          <icon-mdi-github class="color-#010409" />
-        </template>
-        <span class="ml-6px">GitHub</span>
-      </NButton>
-    </div>
+<!--    <div class="w-full flex-y-center gap-16px">-->
+<!--      <NButton class="flex-1" @click="handleSocialLogin('gitee')">-->
+<!--        <template #icon>-->
+<!--          <icon-simple-icons-gitee class="color-#c71d23" />-->
+<!--        </template>-->
+<!--        <span class="ml-6px">Gitee</span>-->
+<!--      </NButton>-->
+<!--      <NButton class="flex-1" @click="handleSocialLogin('github')">-->
+<!--        <template #icon>-->
+<!--          <icon-mdi-github class="color-#010409" />-->
+<!--        </template>-->
+<!--        <span class="ml-6px">GitHub</span>-->
+<!--      </NButton>-->
+<!--    </div>-->
 
-    <div class="mt-24px w-full text-center text-18px text-#858585">
-      您还没有账户？
-      <NA type="primary" class="text-18px" @click="toggleLoginModule('register')">
-        {{ $t('page.login.common.register') }}
-      </NA>
-    </div>
+<!--    <div class="mt-24px w-full text-center text-18px text-#858585">-->
+<!--      您还没有账户？-->
+<!--      <NA type="primary" class="text-18px" @click="toggleLoginModule('register')">-->
+<!--        {{ $t('page.login.common.register') }}-->
+<!--      </NA>-->
+<!--    </div>-->
   </div>
 </template>
 

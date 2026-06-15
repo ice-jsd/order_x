@@ -157,9 +157,6 @@ onMounted(() => {
     <GlobalMenu />
     <GlobalContent />
     <ThemeDrawer />
-    <template #footer>
-      <GlobalFooter />
-    </template>
   </AdminLayout>
 </template>
 

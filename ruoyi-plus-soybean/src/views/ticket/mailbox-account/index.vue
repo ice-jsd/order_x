@@ -1,16 +1,20 @@
 <script setup lang="tsx">
 import { h, reactive, ref } from 'vue';
-import { NButton, NEllipsis, NPopover, NSwitch, NTag } from 'naive-ui';
+import { NButton, NDataTable, NEllipsis, NModal, NPagination, NPopover, NSwitch, NTag } from 'naive-ui';
+import type { DataTableColumns } from 'naive-ui';
 import { useAuth } from '@/hooks/business/auth';
 import { defaultTransform, useNaivePaginatedTable } from '@/hooks/common/table';
 import {
   fetchBatchCreateTicketMailboxAccounts,
   fetchChangeTicketMailboxStatus,
   fetchGetTicketMailboxAccountList,
+  fetchGetTicketMailboxMailRecords,
+  fetchReparseTicketMailboxMailRecords,
   fetchSyncTicketMailboxMail,
   fetchSyncTicketMailboxMails
 } from '@/service/api/ticket';
 import { useAppStore } from '@/store/modules/app';
+import { handleCopy } from '@/utils/copy';
 import { mailboxStatusOptions, renderTicketEllipsis, renderTicketTag } from '../common';
 
 defineOptions({
@@ -26,6 +30,7 @@ function createSearchParams(): Api.Ticket.MailboxAccountSearchParams {
     pageSize: 10,
     email: null,
     status: null,
+    mailKeyword: null,
     params: {}
   };
 }
@@ -35,8 +40,39 @@ const checkedRowKeys = ref<CommonType.IdType[]>([]);
 const createModalVisible = ref(false);
 const createCount = ref(10);
 const creating = ref(false);
+const reparseLoading = ref(false);
 const statusLoadingMap = reactive<Record<string, boolean>>({});
 const syncLoadingMap = reactive<Record<string, boolean>>({});
+const mailRecordVisible = ref(false);
+const mailRecordLoading = ref(false);
+const mailRecordDetailVisible = ref(false);
+const mailRecordDetailTitle = ref('');
+const mailRecordDetailContent = ref('');
+const mailRecordMailbox = ref<Api.Ticket.MailboxAccount | null>(null);
+const mailRecordRows = ref<Api.Ticket.MailRecord[]>([]);
+const mailRecordPagination = reactive({
+  page: 1,
+  pageSize: 10,
+  itemCount: 0
+});
+const mailRecordColumns: DataTableColumns<Api.Ticket.MailRecord> = [
+  { key: 'receivedAt', title: '收件时间', align: 'center', width: 150 },
+  {
+    key: 'subject',
+    title: '邮件内容',
+    align: 'left',
+    minWidth: 360,
+    render: (row: Api.Ticket.MailRecord) => renderMailRecordContent(row)
+  },
+  {
+    key: 'parseType',
+    title: '解析',
+    align: 'center',
+    width: 150,
+    render: (row: Api.Ticket.MailRecord) => renderMailRecordParse(row)
+  },
+  { key: 'syncTime', title: '同步时间', align: 'center', width: 150 }
+];
 
 const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagination, scrollX } =
   useNaivePaginatedTable({
@@ -93,7 +129,15 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
         minWidth: 320,
         render: row => renderLatestMail(row)
       },
-      { key: 'lastMailSyncTime', title: '同步时间', align: 'center', minWidth: 150 },
+      {
+        key: 'matchedMail',
+        title: '命中邮件',
+        align: 'left',
+        width: 340,
+        minWidth: 320,
+        render: row => renderMatchedMail(row)
+      },
+      { key: 'lastMailSyncTime', title: '同步时间', align: 'center', width: 170, minWidth: 170 },
       {
         key: 'lastError',
         title: '异常',
@@ -106,20 +150,32 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
         title: '操作',
         align: 'center',
         fixed: 'right',
-        width: 110,
+        width: 160,
         render: row =>
-          h(
-            NButton,
-            {
-              text: true,
-              type: 'primary',
-              size: 'small',
-              loading: syncLoadingMap[String(row.mailboxId)],
-              disabled: !hasAuth('ticket:mailbox:sync'),
-              onClick: () => handleSyncMail(row)
-            },
-            { default: () => '同步邮件' }
-          )
+          h('div', { class: 'flex-center gap-8px' }, [
+            h(
+              NButton,
+              {
+                text: true,
+                type: 'primary',
+                size: 'small',
+                onClick: () => openMailRecords(row)
+              },
+              { default: () => '记录' }
+            ),
+            h(
+              NButton,
+              {
+                text: true,
+                type: 'primary',
+                size: 'small',
+                loading: syncLoadingMap[String(row.mailboxId)],
+                disabled: !hasAuth('ticket:mailbox:sync'),
+                onClick: () => handleSyncMail(row)
+              },
+              { default: () => '同步' }
+            )
+          ])
       },
       {
         key: 'enabledSwitch',
@@ -131,7 +187,7 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
           const canToggle = ['available', 'disabled'].includes(row.status);
           return (
             <NSwitch
-              value={row.status === 'available'}
+              value={row.status !== 'disabled'}
               size="small"
               loading={statusLoadingMap[String(row.mailboxId)]}
               disabled={!hasAuth('ticket:mailbox:edit') || !canToggle}
@@ -145,25 +201,25 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
 
 function renderMailboxIdentity(row: Api.Ticket.MailboxAccount) {
   const isLegacyDomain = row.email?.endsWith('@orderx.top') || row.domain === 'orderx.top';
+  const domainLabel = isLegacyDomain ? '旧域名' : row.domain || 'gjcytech.com';
+  const domainType = isLegacyDomain ? 'warning' : 'success';
 
   return h('div', { class: 'mailbox-identity' }, [
-    h('div', { class: 'mailbox-identity__main' }, [
-      h(
-        NEllipsis,
-        { tooltip: true, style: { maxWidth: '210px' } },
-        { default: () => row.email || '-' }
-      ),
-      isLegacyDomain
-        ? h(NTag, { size: 'tiny', type: 'warning', bordered: false }, { default: () => '旧域名' })
-        : h(NTag, { size: 'tiny', type: 'success', bordered: false }, { default: () => row.domain || 'gjcytech.com' })
-    ]),
+    h(
+      NEllipsis,
+      { class: 'mailbox-identity__email', tooltip: true },
+      { default: () => row.email || '-' }
+    ),
     h('div', { class: 'mailbox-identity__sub' }, [
-      h('span', '登录名：'),
-      h(
-        NEllipsis,
-        { tooltip: true, style: { maxWidth: '150px' } },
-        { default: () => row.username || '-' }
-      )
+      h('div', { class: 'mailbox-identity__login' }, [
+        h('span', { class: 'mailbox-identity__label' }, '登录名：'),
+        h(
+          NEllipsis,
+          { tooltip: true, style: { maxWidth: '126px' } },
+          { default: () => row.username || '-' }
+        )
+      ]),
+      h(NTag, { class: 'mailbox-identity__domain', size: 'tiny', type: domainType, bordered: false }, { default: () => domainLabel })
     ])
   ]);
 }
@@ -184,15 +240,34 @@ function renderLatestMail(row: Api.Ticket.MailboxAccount) {
 
   const previewTitle = row.latestMailSubject || '无标题邮件';
   const previewExcerpt = row.latestMailExcerpt || row.latestActivationUrl || row.latestVerifyCode || '-';
+  const popoverMaxWidth = 'min(460px, calc(100vw - 48px))';
+  const latestMailPreviewText = [row.latestMailSubject, row.latestMailExcerpt].filter(Boolean).join(' ');
+  const latestMailLooksLikeLotteryApplication =
+    latestMailPreviewText.includes('受付番号') ||
+    latestMailPreviewText.includes('申込番号') ||
+    latestMailPreviewText.includes('抽選申し込みを受け付けました') ||
+    latestMailPreviewText.includes('お申し込みを受け付けました');
+  const shouldShowLatestVerifyCode = !!row.latestVerifyCode && !latestMailLooksLikeLotteryApplication;
   return h(
     NPopover,
-    { trigger: 'hover', placement: 'left', width: 460 },
+    { trigger: 'hover', placement: 'top', width: 460, style: { maxWidth: popoverMaxWidth } },
     {
       trigger: () =>
         h('div', { class: 'mailbox-mail cursor-help' }, [
           h('div', { class: 'mailbox-mail__tags' }, [
-            row.latestVerifyCode
-              ? h(NTag, { size: 'tiny', type: 'success', bordered: false }, { default: () => row.latestVerifyCode })
+            shouldShowLatestVerifyCode
+              ? h(
+                  NTag,
+                  {
+                    class: 'mailbox-mail__verify-code',
+                    size: 'tiny',
+                    type: 'success',
+                    bordered: false,
+                    title: '点击复制验证码',
+                    onClick: (event: MouseEvent) => handleCopyVerifyCode(event, row.latestVerifyCode)
+                  },
+                  { default: () => row.latestVerifyCode }
+                )
               : null,
             row.latestActivationUrl
               ? h(NTag, { size: 'tiny', type: 'info', bordered: false }, { default: () => '激活链接' })
@@ -211,12 +286,23 @@ function renderLatestMail(row: Api.Ticket.MailboxAccount) {
           h('div', { class: 'mailbox-mail__meta' }, row.latestMailReceivedAt || row.latestMailFrom || '查看邮件详情')
         ]),
       default: () =>
-        h('div', { class: 'max-w-430px text-left text-12px leading-20px' }, [
+        h('div', { class: 'text-left text-12px leading-20px', style: { maxWidth: popoverMaxWidth } }, [
           h('div', { class: 'font-600 text-text-1' }, row.latestMailSubject || '无标题邮件'),
           h('div', { class: 'mt-6px text-text-3' }, `发件人：${row.latestMailFrom || '-'}`),
           h('div', { class: 'text-text-3' }, `收件时间：${row.latestMailReceivedAt || '-'}`),
           h('div', { class: 'text-text-3' }, `Message-ID：${row.latestMailMessageId || '-'}`),
-          h('div', { class: 'mt-8px' }, `验证码：${row.latestVerifyCode || '-'}`),
+            shouldShowLatestVerifyCode
+              ? h(
+                'button',
+                {
+                  class: 'mailbox-mail__popover-code',
+                  type: 'button',
+                  title: '点击复制验证码',
+                  onClick: (event: MouseEvent) => handleCopyVerifyCode(event, row.latestVerifyCode)
+                },
+                `验证码：${row.latestVerifyCode}`
+              )
+            : h('div', { class: 'mt-8px' }, latestMailLooksLikeLotteryApplication ? '受付番号：请查看邮件记录' : '验证码：-'),
           h('div', { class: 'break-all' }, `激活链接：${row.latestActivationUrl || '-'}`),
           h(
             'pre',
@@ -228,6 +314,59 @@ function renderLatestMail(row: Api.Ticket.MailboxAccount) {
   );
 }
 
+function shouldShowMailRecordVerifyCode(row: Api.Ticket.MailRecord) {
+  if (!row.verifyCode) return false;
+  if (row.parseType !== 'verify_code') return false;
+  if (row.lotteryApplicationNo) return false;
+  return true;
+}
+
+function getMailRecordApplicationNoLabel(row: Api.Ticket.MailRecord) {
+  return row.parseType === 'purchase_completed' ? '申込番号' : '受付番号';
+}
+
+function renderMatchedMail(row: Api.Ticket.MailboxAccount) {
+  const hasKeyword = !!searchParams.value.mailKeyword?.trim();
+  if (!hasKeyword) {
+    return h('span', { class: 'text-12px text-text-3' }, '-');
+  }
+  if (!row.matchedMailRecordId) {
+    return h('div', { class: 'mailbox-mail mailbox-mail--empty' }, [
+      h('div', { class: 'mailbox-mail__title' }, '无命中记录'),
+      h('div', { class: 'mailbox-mail__meta' }, '当前页未返回匹配邮件')
+    ]);
+  }
+  return h(
+    'button',
+    {
+      class: 'matched-mail',
+      type: 'button',
+      title: '查看该邮箱邮件记录',
+      onClick: () => openMailRecords(row)
+    },
+    [
+      h(
+        NEllipsis,
+        { tooltip: true, style: { width: '100%', maxWidth: '100%' } },
+        { default: () => row.matchedMailSubject || '无标题邮件' }
+      ),
+      h(
+        NEllipsis,
+        { tooltip: false, lineClamp: 2, style: { width: '100%', maxWidth: '100%' } },
+        { default: () => row.matchedMailExcerpt || '-' }
+      ),
+      h('span', { class: 'matched-mail__meta' }, row.matchedMailReceivedAt || row.matchedMailFrom || '-')
+    ]
+  );
+}
+
+async function handleCopyVerifyCode(event: MouseEvent, verifyCode?: string) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!verifyCode) return;
+  await handleCopy(verifyCode);
+}
+
 function renderMailboxError(row: Api.Ticket.MailboxAccount) {
   const rawError = row.lastError || row.lastMailSyncError;
   if (!rawError) {
@@ -237,10 +376,11 @@ function renderMailboxError(row: Api.Ticket.MailboxAccount) {
   const isDomainSwitch = rawError.includes('域名') || rawError.includes('gjcytech.com');
   const label = isDomainSwitch ? '旧域名停用' : row.lastMailSyncError ? '同步异常' : '创建异常';
   const type = isDomainSwitch ? 'warning' : 'error';
+  const popoverMaxWidth = 'min(360px, calc(100vw - 48px))';
 
   return h(
     NPopover,
-    { trigger: 'hover', placement: 'left', width: 360 },
+    { trigger: 'hover', placement: 'top', width: 360, style: { maxWidth: popoverMaxWidth } },
     {
       trigger: () =>
         h('div', { class: 'inline-flex cursor-help flex-col items-center gap-4px' }, [
@@ -251,9 +391,133 @@ function renderMailboxError(row: Api.Ticket.MailboxAccount) {
             { default: () => rawError }
           )
         ]),
-      default: () => h('div', { class: 'max-w-330px break-all text-12px leading-20px' }, rawError)
+      default: () =>
+        h('div', { class: 'break-all text-12px leading-20px', style: { maxWidth: popoverMaxWidth } }, rawError)
     }
   );
+}
+
+function renderMailRecordContent(row: Api.Ticket.MailRecord) {
+  return h('div', { class: 'mail-record-content' }, [
+    h('div', { class: 'mail-record-content__title' }, [
+      h(NEllipsis, { tooltip: true }, { default: () => row.subject || '无标题邮件' })
+    ]),
+    h('div', { class: 'mail-record-content__meta' }, `发件人：${row.fromAddress || '-'} · 目录：${row.folderName || '-'}`),
+    h('div', { class: 'mail-record-content__excerpt' }, [
+      h(NEllipsis, { lineClamp: 2, tooltip: false }, { default: () => row.bodyContent || row.bodyExcerpt || row.activationUrl || '-' })
+    ]),
+    h('div', { class: 'mail-record-content__actions' }, [
+      row.messageId ? h('span', { class: 'mail-record-content__message-id' }, `Message-ID：${row.messageId}`) : null,
+      h(
+        NButton,
+        {
+          text: true,
+          size: 'tiny',
+          type: 'primary',
+          disabled: !(row.bodyContent || row.bodyExcerpt),
+          onClick: () => openMailRecordDetail(row)
+        },
+        { default: () => '详情' }
+      )
+    ])
+  ]);
+}
+
+function renderMailRecordParse(row: Api.Ticket.MailRecord) {
+  const parseLabel =
+    {
+      verify_code: '验证码',
+      activation_url: '激活邮件',
+      lottery_applied: '抽选申请邮件',
+      lottery_selected: '当选邮件',
+      lottery_rejected: '落选邮件',
+      purchase_completed: '购入邮件',
+      unknown: '其他邮件'
+    }[row.parseType || 'unknown'] || row.parseType || 'unknown';
+  return h('div', { class: 'mail-record-parse' }, [
+    h(NTag, { size: 'small', type: row.parsed ? 'success' : 'default', bordered: false }, { default: () => parseLabel }),
+    shouldShowMailRecordVerifyCode(row)
+      ? h(
+          NTag,
+          {
+            class: 'mailbox-mail__verify-code',
+            size: 'small',
+            type: 'success',
+            bordered: false,
+            title: '点击复制验证码',
+            onClick: (event: MouseEvent) => handleCopyVerifyCode(event, row.verifyCode)
+          },
+          { default: () => row.verifyCode }
+        )
+      : null,
+    row.lotteryApplicationNo
+      ? h(
+          NTag,
+          { size: 'small', type: 'success', bordered: false },
+          { default: () => `${getMailRecordApplicationNoLabel(row)} ${row.lotteryApplicationNo}` }
+        )
+      : null,
+    row.activationUrl ? h(NTag, { size: 'small', type: 'info', bordered: false }, { default: () => '激活链接' }) : null
+  ]);
+}
+
+function openMailRecordDetail(row: Api.Ticket.MailRecord) {
+  mailRecordDetailTitle.value = row.subject || '邮件详情';
+  mailRecordDetailContent.value = [
+    `发件人：${row.fromAddress || '-'}`,
+    `收件时间：${row.receivedAt || '-'}`,
+    `Message-ID：${row.messageId || '-'}`,
+    `类型：${
+      {
+        verify_code: '验证码',
+        activation_url: '激活邮件',
+        lottery_applied: '抽选申请邮件',
+        lottery_selected: '当选邮件',
+        lottery_rejected: '落选邮件',
+        purchase_completed: '购入邮件',
+        unknown: '其他邮件'
+      }[row.parseType || 'unknown'] || row.parseType || 'unknown'
+    }`,
+    `验证码：${shouldShowMailRecordVerifyCode(row) ? row.verifyCode : '-'}`,
+    `激活链接：${row.activationUrl || '-'}`,
+    `抽选结果：${row.lotteryResultStatus === 'selected' ? '已当选' : row.lotteryResultStatus || '-'}`,
+    `${getMailRecordApplicationNoLabel(row)}：${row.lotteryApplicationNo || '-'}`,
+    '',
+    row.bodyContent || row.bodyExcerpt || '-'
+  ].join('\n');
+  mailRecordDetailVisible.value = true;
+}
+
+async function openMailRecords(row: Api.Ticket.MailboxAccount) {
+  mailRecordMailbox.value = row;
+  mailRecordPagination.page = 1;
+  mailRecordVisible.value = true;
+  await loadMailRecords();
+}
+
+async function loadMailRecords() {
+  if (!mailRecordMailbox.value) return;
+  mailRecordLoading.value = true;
+  const { data: response, error } = await fetchGetTicketMailboxMailRecords(mailRecordMailbox.value.mailboxId, {
+    pageNum: mailRecordPagination.page,
+    pageSize: mailRecordPagination.pageSize,
+    params: {}
+  });
+  mailRecordLoading.value = false;
+  if (error) return;
+  mailRecordRows.value = response?.rows || [];
+  mailRecordPagination.itemCount = response?.total || 0;
+}
+
+function handleMailRecordPageChange(page: number) {
+  mailRecordPagination.page = page;
+  void loadMailRecords();
+}
+
+function handleMailRecordPageSizeChange(pageSize: number) {
+  mailRecordPagination.pageSize = pageSize;
+  mailRecordPagination.page = 1;
+  void loadMailRecords();
 }
 
 function getMailboxRowClass(row: Api.Ticket.MailboxAccount) {
@@ -354,9 +618,27 @@ async function handleBatchSyncMail() {
   if (error) {
     return;
   }
-  window.$message?.success('已提交同步');
+  window.$message?.success('邮件同步完成');
   checkedRowKeys.value = [];
   await getData();
+}
+
+function handleReparseMailRecords() {
+  window.$dialog?.warning({
+    title: '重解析历史邮件',
+    content: '将对系统中已保存的所有邮件记录重新分类，不会重新连接邮箱服务器。确定开始吗？',
+    positiveText: '开始重解析',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      reparseLoading.value = true;
+      const { data, error } = await fetchReparseTicketMailboxMailRecords();
+      reparseLoading.value = false;
+      if (error) {
+        return;
+      }
+      window.$message?.success(data?.message || '历史邮件重解析已开始，请稍后刷新查看');
+    }
+  });
 }
 
 void getData();
@@ -376,6 +658,14 @@ void getData();
             :options="mailboxStatusOptions"
             placeholder="请选择状态"
             class="w-160px"
+          />
+        </NFormItem>
+        <NFormItem label="邮件内容">
+          <NInput
+            v-model:value="searchParams.mailKeyword"
+            clearable
+            placeholder="匹配历史邮件标题/正文"
+            class="w-260px"
           />
         </NFormItem>
         <NFormItem>
@@ -413,6 +703,16 @@ void getData();
             >
               同步邮件
             </NButton>
+            <NButton
+              v-if="hasAuth('ticket:mailbox:sync')"
+              size="small"
+              ghost
+              type="warning"
+              :loading="reparseLoading"
+              @click="handleReparseMailRecords"
+            >
+              重解析历史邮件
+            </NButton>
           </template>
         </TableHeaderOperation>
       </template>
@@ -448,6 +748,38 @@ void getData();
         </div>
       </template>
     </NModal>
+
+    <NModal
+      v-model:show="mailRecordVisible"
+      preset="card"
+      :title="`邮件记录：${mailRecordMailbox?.email || ''}`"
+      class="w-980px"
+    >
+      <NDataTable
+        :columns="mailRecordColumns"
+        :data="mailRecordRows"
+        size="small"
+        :bordered="false"
+        :loading="mailRecordLoading"
+        :pagination="false"
+        max-height="520"
+      />
+      <div class="mt-14px flex justify-end">
+        <NPagination
+          v-model:page="mailRecordPagination.page"
+          v-model:page-size="mailRecordPagination.pageSize"
+          show-size-picker
+          :item-count="mailRecordPagination.itemCount"
+          :page-sizes="[10, 20, 50]"
+          @update:page="handleMailRecordPageChange"
+          @update:page-size="handleMailRecordPageSizeChange"
+        />
+      </div>
+    </NModal>
+
+    <NModal v-model:show="mailRecordDetailVisible" preset="card" :title="mailRecordDetailTitle" class="w-760px">
+      <NInput :value="mailRecordDetailContent" type="textarea" :rows="20" readonly />
+    </NModal>
   </div>
 </template>
 
@@ -455,26 +787,43 @@ void getData();
 .mailbox-identity {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   min-width: 0;
   padding-left: 2px;
+  text-align: left;
 }
 
-.mailbox-identity__main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
+.mailbox-identity__email {
+  max-width: 220px;
   font-weight: 600;
   color: var(--text-color-1);
+  line-height: 18px;
 }
 
 .mailbox-identity__sub {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 220px;
   min-width: 0;
   font-size: 12px;
   color: var(--text-color-3);
+  line-height: 18px;
+}
+
+.mailbox-identity__login {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.mailbox-identity__label {
+  flex: none;
+}
+
+.mailbox-identity__domain {
+  flex: none;
 }
 
 .mailbox-mail {
@@ -498,12 +847,81 @@ void getData();
   min-height: 18px;
 }
 
+:deep(.mailbox-mail__verify-code) {
+  cursor: pointer;
+  user-select: none;
+  transition:
+    filter 0.18s ease,
+    transform 0.18s ease;
+}
+
+:deep(.mailbox-mail__verify-code:hover) {
+  filter: brightness(0.96);
+  transform: translateY(-1px);
+}
+
+.mailbox-mail__popover-code {
+  padding: 0;
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 20px;
+  color: #16a34a;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+.mailbox-mail__popover-code:hover {
+  color: #15803d;
+  text-decoration: underline;
+}
+
 .mailbox-mail__title {
   font-size: 13px;
   color: var(--text-color-2);
 }
 
 .mailbox-mail__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-color-3);
+}
+
+.matched-mail {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 54px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 0;
+  color: var(--text-color-2);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.matched-mail:hover {
+  color: #2563eb;
+}
+
+.matched-mail :deep(.n-ellipsis) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.matched-mail__meta {
+  display: block;
+  width: 100%;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -520,5 +938,46 @@ void getData();
 :deep(.mailbox-row-disabled:hover td),
 :deep(.mailbox-row-legacy:hover td) {
   background: #f6f8fb;
+}
+
+.mail-record-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  text-align: left;
+}
+
+.mail-record-content__title {
+  font-weight: 600;
+  color: var(--text-color-1);
+  line-height: 18px;
+}
+
+.mail-record-content__meta,
+.mail-record-content__message-id {
+  font-size: 12px;
+  color: var(--text-color-3);
+  line-height: 18px;
+}
+
+.mail-record-content__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mail-record-content__excerpt {
+  font-size: 12px;
+  color: var(--text-color-2);
+  line-height: 18px;
+}
+
+.mail-record-parse {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
 </style>

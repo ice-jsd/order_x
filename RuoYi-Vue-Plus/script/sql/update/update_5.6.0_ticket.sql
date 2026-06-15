@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 -- ----------------------------
 -- 票务运营模块建表
 -- ----------------------------
@@ -33,7 +35,7 @@ CREATE TABLE IF NOT EXISTS `ticket_platform_config` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='票务平台配置表';
 
 CREATE TABLE IF NOT EXISTS `ticket_phone_number` (
-  `phone_id` bigint(20) NOT NULL COMMENT '号码主键',
+  `phone_id` bigint(20) DEFAULT NULL COMMENT '号码主键',
   `tenant_id` varchar(20) DEFAULT '000000' COMMENT '租户编号',
   `phone_number` varchar(64) NOT NULL COMMENT '号码',
   `country_code` varchar(16) DEFAULT NULL COMMENT '国家区号',
@@ -138,6 +140,41 @@ CREATE TABLE IF NOT EXISTS `ticket_mailbox_account` (
   KEY `idx_ticket_mailbox_used_account` (`used_account_id`),
   KEY `idx_ticket_mailbox_tenant` (`tenant_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮箱账号池表';
+
+CREATE TABLE IF NOT EXISTS `ticket_mail_record` (
+  `record_id` bigint(20) NOT NULL COMMENT '邮件记录主键',
+  `tenant_id` varchar(20) DEFAULT '000000' COMMENT '租户编号',
+  `mailbox_id` bigint(20) NOT NULL COMMENT '邮箱账号主键',
+  `account_id` bigint(20) DEFAULT NULL COMMENT '关联平台账号',
+  `email` varchar(255) NOT NULL COMMENT '邮箱地址',
+  `username` varchar(255) DEFAULT NULL COMMENT '邮箱用户名',
+  `folder_name` varchar(128) DEFAULT NULL COMMENT '邮件目录',
+  `message_id` varchar(255) DEFAULT NULL COMMENT 'Message-ID',
+  `subject` varchar(1000) DEFAULT NULL COMMENT '邮件标题',
+  `from_address` varchar(500) DEFAULT NULL COMMENT '发件人',
+  `received_at` datetime DEFAULT NULL COMMENT '收件时间',
+  `body_excerpt` varchar(2000) DEFAULT NULL COMMENT '正文摘要',
+  `body_content` longtext COMMENT '邮件正文',
+  `parse_type` varchar(32) DEFAULT NULL COMMENT '解析类型',
+  `verify_code` varchar(32) DEFAULT NULL COMMENT '验证码',
+  `activation_url` longtext COMMENT '激活链接',
+  `parsed` tinyint(1) DEFAULT 0 COMMENT '是否解析成功',
+  `read_source` varchar(64) DEFAULT NULL COMMENT '读取来源',
+  `sync_time` datetime DEFAULT NULL COMMENT '同步时间',
+  `del_flag` bigint(20) DEFAULT 0 COMMENT '删除标志',
+  `create_dept` bigint(20) DEFAULT NULL COMMENT '创建部门',
+  `create_by` bigint(20) DEFAULT NULL COMMENT '创建者',
+  `create_time` datetime DEFAULT NULL COMMENT '创建时间',
+  `update_by` bigint(20) DEFAULT NULL COMMENT '更新者',
+  `update_time` datetime DEFAULT NULL COMMENT '更新时间',
+  PRIMARY KEY (`record_id`),
+  UNIQUE KEY `uk_ticket_mail_record_message` (`mailbox_id`, `message_id`, `del_flag`),
+  KEY `idx_ticket_mail_record_mailbox` (`mailbox_id`),
+  KEY `idx_ticket_mail_record_account` (`account_id`),
+  KEY `idx_ticket_mail_record_received` (`received_at`),
+  KEY `idx_ticket_mail_record_verify_code` (`verify_code`),
+  KEY `idx_ticket_mail_record_tenant` (`tenant_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='邮箱邮件记录表';
 
 CREATE TABLE IF NOT EXISTS `ticket_registration_batch` (
   `batch_id` bigint(20) NOT NULL COMMENT '批次主键',
@@ -253,7 +290,7 @@ CREATE TABLE IF NOT EXISTS `ticket_sale_task` (
   KEY `idx_ticket_sale_task_platform` (`platform_id`),
   KEY `idx_ticket_sale_task_purchase_type` (`purchase_type`),
   KEY `idx_ticket_sale_task_status` (`task_status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商品抢购任务表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务管理表';
 
 CREATE TABLE IF NOT EXISTS `ticket_sale_task_account` (
   `binding_id` bigint(20) NOT NULL COMMENT '绑定主键',
@@ -341,7 +378,7 @@ FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20000);
 
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
-SELECT 20001, '平台接入', 20000, 1, 'platform', 'ticket/platform/index', '', 1, 0, 'C', '0', '0', 'ticket:platform:list', 'tool', 103, 1, SYSDATE(), NULL, NULL, '平台接入菜单'
+SELECT 20001, '抢购平台', 20000, 1, 'platform', 'ticket/platform/index', '', 1, 0, 'C', '0', '0', 'ticket:platform:list', 'tool', 103, 1, SYSDATE(), NULL, NULL, '抢购平台菜单'
 FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20001);
 
@@ -356,7 +393,16 @@ FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20003);
 
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
-SELECT 20010, '邮箱账号池', 20000, 4, 'mailbox-account', 'ticket/mailbox-account/index', '', 1, 0, 'C', '0', '0', 'ticket:mailbox:list', 'mail', 103, 1, SYSDATE(), NULL, NULL, '邮箱账号池菜单'
+SELECT 20011, '执行记录', 20000, 4, 'registration-batch', 'ticket/registration-batch/index', '', 1, 0, 'C', '0', '0', 'ticket:account:list', 'list', 103, 1, SYSDATE(), NULL, NULL, '账号池批量注册/登录执行记录'
+FROM dual
+WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20011);
+
+UPDATE `sys_menu`
+SET `visible` = '0', `status` = '0'
+WHERE `menu_id` = 20011;
+
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
+SELECT 20010, '邮箱账号池', 20000, 5, 'mailbox-account', 'ticket/mailbox-account/index', '', 1, 0, 'C', '0', '0', 'ticket:mailbox:list', 'mail', 103, 1, SYSDATE(), NULL, NULL, '邮箱账号池菜单'
 FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20010);
 
@@ -401,12 +447,12 @@ FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20006);
 
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
-SELECT 20007, '商品抢购任务', 20000, 7, 'sale-task', 'ticket/sale-task/index', '', 1, 0, 'C', '0', '0', 'ticket:saleTask:list', 'job', 103, 1, SYSDATE(), NULL, NULL, '商品抢购任务菜单'
+SELECT 20007, '任务管理', 20000, 7, 'sale-task', 'ticket/sale-task/index', '', 1, 0, 'C', '0', '0', 'ticket:saleTask:list', 'job', 103, 1, SYSDATE(), NULL, NULL, '任务管理菜单'
 FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20007);
 
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query_param`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_dept`, `create_by`, `create_time`, `update_by`, `update_time`, `remark`)
-SELECT 20008, '下单执行', 20000, 8, 'order-execution', 'ticket/order-execution/index', '', 1, 0, 'C', '0', '0', 'ticket:orderExecution:list', 'list', 103, 1, SYSDATE(), NULL, NULL, '下单执行菜单'
+SELECT 20008, '订单列表', 20000, 8, 'order-execution', 'ticket/order-execution/index', '', 1, 0, 'C', '0', '0', 'ticket:orderExecution:list', 'list', 103, 1, SYSDATE(), NULL, NULL, '订单列表菜单'
 FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20008);
 
@@ -494,3 +540,95 @@ INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`
 SELECT 20802, '执行状态更新', 20008, 2, '', '', '', 1, 0, 'F', '0', '0', 'ticket:orderExecution:edit', '#', 103, 1, SYSDATE(), NULL, NULL, ''
 FROM dual
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 20802);
+
+-- ----------------------------
+-- 抽票活动解析记录表及异步字段补齐
+-- ----------------------------
+
+CREATE TABLE IF NOT EXISTS `ticket_lottery_event_parse_record` (
+  `record_id` bigint NOT NULL COMMENT '解析记录ID',
+  `platform_id` bigint NOT NULL COMMENT '平台ID',
+  `event_url` varchar(500) NOT NULL COMMENT 'LivePocket 活动链接',
+  `ticket_entry_url` varchar(500) DEFAULT NULL COMMENT 'LivePocket tickets页链接',
+  `event_title` varchar(300) DEFAULT NULL COMMENT '活动标题',
+  `entry_start_time` varchar(32) DEFAULT NULL COMMENT '受付开始时间',
+  `entry_end_time` varchar(32) DEFAULT NULL COMMENT '受付结束时间',
+  `sessions_json` longtext COMMENT '场次列表JSON',
+  `raw_summary` longtext COMMENT '页面摘要',
+  `parse_status` varchar(32) DEFAULT 'completed' COMMENT '解析状态',
+  `parse_request_id` varchar(64) DEFAULT NULL COMMENT '解析请求ID',
+  `parse_message` varchar(500) DEFAULT NULL COMMENT '解析消息',
+  `del_flag` bigint NOT NULL DEFAULT 0 COMMENT '删除标志',
+  `tenant_id` varchar(20) DEFAULT '000000' COMMENT '租户编号',
+  `create_dept` bigint DEFAULT NULL COMMENT '创建部门',
+  `create_by` bigint DEFAULT NULL COMMENT '创建者',
+  `create_time` datetime DEFAULT NULL COMMENT '创建时间',
+  `update_by` bigint DEFAULT NULL COMMENT '更新者',
+  `update_time` datetime DEFAULT NULL COMMENT '更新时间',
+  PRIMARY KEY (`record_id`),
+  UNIQUE KEY `uk_ticket_lottery_parse_record` (`tenant_id`, `platform_id`, `event_url`, `del_flag`),
+  KEY `idx_ticket_lottery_parse_platform` (`tenant_id`, `platform_id`, `del_flag`),
+  KEY `idx_ticket_lottery_parse_time` (`tenant_id`, `update_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='抽票活动解析记录';
+
+SET @schema_name = DATABASE();
+
+SET @sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `ticket_lottery_event_parse_record` ADD COLUMN `ticket_entry_url` varchar(500) DEFAULT NULL COMMENT ''LivePocket tickets页链接'' AFTER `event_url`',
+    'SELECT 1'
+  )
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = @schema_name
+    AND TABLE_NAME = 'ticket_lottery_event_parse_record'
+    AND COLUMN_NAME = 'ticket_entry_url'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `ticket_lottery_event_parse_record` ADD COLUMN `parse_status` varchar(32) DEFAULT ''completed'' COMMENT ''解析状态'' AFTER `raw_summary`',
+    'SELECT 1'
+  )
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = @schema_name
+    AND TABLE_NAME = 'ticket_lottery_event_parse_record'
+    AND COLUMN_NAME = 'parse_status'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `ticket_lottery_event_parse_record` ADD COLUMN `parse_request_id` varchar(64) DEFAULT NULL COMMENT ''解析请求ID'' AFTER `parse_status`',
+    'SELECT 1'
+  )
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = @schema_name
+    AND TABLE_NAME = 'ticket_lottery_event_parse_record'
+    AND COLUMN_NAME = 'parse_request_id'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `ticket_lottery_event_parse_record` ADD COLUMN `parse_message` varchar(500) DEFAULT NULL COMMENT ''解析消息'' AFTER `parse_request_id`',
+    'SELECT 1'
+  )
+  FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = @schema_name
+    AND TABLE_NAME = 'ticket_lottery_event_parse_record'
+    AND COLUMN_NAME = 'parse_message'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;

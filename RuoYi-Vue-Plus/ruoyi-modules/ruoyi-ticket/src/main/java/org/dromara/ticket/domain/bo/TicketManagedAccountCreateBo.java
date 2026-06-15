@@ -14,7 +14,6 @@ public class TicketManagedAccountCreateBo extends BaseEntity {
 
     @NotNull(message = "平台不能为空")
     private Long platformId;
-    @NotNull(message = "来源号码不能为空")
     private Long phoneId;
     @NotBlank(message = "邮箱不能为空")
     private String email;

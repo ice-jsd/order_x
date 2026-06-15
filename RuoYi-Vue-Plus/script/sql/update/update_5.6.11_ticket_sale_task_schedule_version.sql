@@ -1,4 +1,4 @@
--- 商品抢购任务保存即排队改造：增加调度版本号
+-- 任务管理保存即排队改造：增加调度版本号
 
 ALTER TABLE `ticket_sale_task`
   ADD COLUMN `schedule_version` bigint(20) NOT NULL DEFAULT 1 COMMENT '调度版本号' AFTER `task_status`;

@@ -86,7 +86,9 @@ export const useRouteStore = defineStore(SetupStoreId.Route, () => {
     dynamicRoutes.authRoutes.forEach(route => {
       const parent = authRoutesMap.get(route.name);
       if (parent && route.children) {
-        parent.children?.push(...route.children);
+        const existingChildNames = new Set(parent.children?.map(child => child.name));
+        const nextChildren = route.children.filter(child => !existingChildNames.has(child.name));
+        parent.children?.push(...nextChildren);
         return;
       }
       authRoutesMap.set(route.name, route);

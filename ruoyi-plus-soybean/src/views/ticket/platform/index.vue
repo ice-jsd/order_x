@@ -9,7 +9,6 @@ import {
   fetchUpdateTicketPlatform
 } from '@/service/api/ticket';
 import { useAppStore } from '@/store/modules/app';
-import { renderTicketEllipsis } from '../common';
 
 defineOptions({
   name: 'TicketPlatformList'
@@ -23,7 +22,6 @@ interface PlatformFormModel {
   platformCode: string;
   platformName: string;
   enabled: boolean;
-  orderSubmitUrl: string;
 }
 
 function createSearchParams(): Api.Ticket.PlatformSearchParams {
@@ -42,8 +40,7 @@ function createFormModel(): PlatformFormModel {
     platformId: undefined,
     platformCode: '',
     platformName: '',
-    enabled: true,
-    orderSubmitUrl: '',
+    enabled: true
   };
 }
 
@@ -82,7 +79,6 @@ const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagi
       { type: 'selection', align: 'center', width: 48 },
       { key: 'platformCode', title: '平台编码', align: 'center', width: 140 },
       { key: 'platformName', title: '平台名称', align: 'center', minWidth: 180 },
-      { key: 'orderSubmitUrl', title: '下单接口地址', align: 'center', minWidth: 260, render: row => renderTicketEllipsis(row.orderSubmitUrl) },
       {
         key: 'operate',
         title: '操作',
@@ -143,8 +139,7 @@ function handleEdit(row: Api.Ticket.Platform) {
     platformId: row.platformId,
     platformCode: row.platformCode,
     platformName: row.platformName,
-    enabled: row.enabled,
-    orderSubmitUrl: row.orderSubmitUrl,
+    enabled: row.enabled
   };
   modalVisible.value = true;
 }
@@ -176,8 +171,7 @@ async function handleTogglePlatformEnabled(row: Api.Ticket.Platform, enabled: bo
         platformId: row.platformId,
         platformCode: row.platformCode,
         platformName: row.platformName,
-        enabled,
-        orderSubmitUrl: row.orderSubmitUrl
+        enabled
       };
       const { error } = await fetchUpdateTicketPlatform(payload);
       statusLoadingMap[rowKey] = false;
@@ -194,7 +188,7 @@ async function handleTogglePlatformEnabled(row: Api.Ticket.Platform, enabled: bo
 
 <template>
   <div class="min-h-500px flex-col-stretch gap-16px overflow-hidden lt-sm:overflow-auto">
-    <NCard title="平台筛选" :bordered="false" size="small" class="card-wrapper">
+    <NCard title="抢购平台筛选" :bordered="false" size="small" class="card-wrapper">
       <NForm inline label-placement="left" :label-width="72">
         <NFormItem label="平台编码">
           <NInput v-model:value="searchParams.platformCode" clearable placeholder="请输入平台编码" />
@@ -220,7 +214,7 @@ async function handleTogglePlatformEnabled(row: Api.Ticket.Platform, enabled: bo
       </NForm>
     </NCard>
 
-    <NCard title="平台配置中心" :bordered="false" size="small" class="card-wrapper sm:flex-1-hidden">
+    <NCard title="抢购平台管理" :bordered="false" size="small" class="card-wrapper sm:flex-1-hidden">
       <template #header-extra>
         <TableHeaderOperation
           v-model:columns="columnChecks"
@@ -259,9 +253,6 @@ async function handleTogglePlatformEnabled(row: Api.Ticket.Platform, enabled: bo
             <NSpace>
               <NCheckbox v-model:checked="formModel.enabled">启用平台</NCheckbox>
             </NSpace>
-          </NFormItemGi>
-          <NFormItemGi :span="24" label="下单接口地址">
-            <NInput v-model:value="formModel.orderSubmitUrl" placeholder="https://example.com/api/order/submit" />
           </NFormItemGi>
         </NGrid>
       </NForm>

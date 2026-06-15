@@ -18,6 +18,7 @@ public class TicketManagedAccountVo implements Serializable {
     private Long accountId;
     private String tenantId;
     private Long platformId;
+    private String platformCode;
     private Long phoneId;
     private String email;
     private String accountInfo;
@@ -34,4 +35,12 @@ public class TicketManagedAccountVo implements Serializable {
     private String latestMailMessageId;
     private String platformName;
     private String phoneNumber;
+    private Long mailboxId;
+    private String mailboxBindingStatus;
+    private Long mailboxBoundAccountId;
+    private Boolean lotteryLinkOccupied;
+    private Long lotteryLinkOccupiedTaskId;
+    private String lotteryLinkOccupiedTaskName;
+    private Date lotteryLinkOccupiedAt;
+    private String lotteryLinkOccupiedStatus;
 }

@@ -110,8 +110,6 @@ declare namespace Env {
     readonly VITE_WATERMARK?: CommonType.YesOrNo;
     /** show proxy url log in terminal */
     readonly VITE_PROXY_LOG?: CommonType.YesOrNo;
-    /** The launch editor */
-    readonly VITE_DEVTOOLS_LAUNCH_EDITOR?: import('vite-plugin-vue-devtools').VitePluginVueDevToolsOptions['launchEditor'];
     readonly VITE_APP_CLIENT_ID?: string;
     readonly VITE_REMEMBER_ME_AES_KEY?: string;
     readonly VITE_APP_ENCRYPT?: CommonType.YesOrNo;

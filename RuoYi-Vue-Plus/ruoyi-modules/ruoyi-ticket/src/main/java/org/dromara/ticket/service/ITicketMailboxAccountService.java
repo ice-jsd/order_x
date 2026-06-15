@@ -5,10 +5,16 @@ import org.dromara.common.mybatis.core.page.TableDataInfo;
 import org.dromara.ticket.domain.TicketMailboxAccount;
 import org.dromara.ticket.domain.bo.TicketMailboxAccountBo;
 import org.dromara.ticket.domain.bo.TicketMailboxBatchCreateBo;
+import org.dromara.ticket.domain.bo.TicketMailFeedBo;
 import org.dromara.ticket.domain.bo.TicketMailboxMailSyncBo;
 import org.dromara.ticket.domain.bo.TicketMailboxStatusBo;
 import org.dromara.ticket.domain.vo.TicketMailboxAccountVo;
 import org.dromara.ticket.domain.vo.TicketMailboxBatchCreateResultVo;
+import org.dromara.ticket.domain.vo.TicketMailRecordVo;
+import org.dromara.ticket.domain.vo.TicketMailRecordReparseResultVo;
+import jakarta.servlet.http.HttpServletResponse;
+
+import java.util.Date;
 
 public interface ITicketMailboxAccountService {
 
@@ -23,4 +29,20 @@ public interface ITicketMailboxAccountService {
     boolean syncLatestMail(Long mailboxId);
 
     boolean syncLatestMail(TicketMailboxMailSyncBo bo);
+
+    boolean syncGlobalMail();
+
+    TicketMailRecordReparseResultVo reparseAllMailRecords();
+
+    TableDataInfo<TicketMailRecordVo> selectMailRecordPage(Long mailboxId, PageQuery pageQuery);
+
+    TableDataInfo<TicketMailRecordVo> selectMailFeedPage(TicketMailFeedBo bo, PageQuery pageQuery);
+
+    void exportMailFeed(TicketMailFeedBo bo, HttpServletResponse response);
+
+    int removeMailFeedRecords(TicketMailFeedBo bo);
+
+    int removeMailRecords(Long[] recordIds);
+
+    int cleanupOldMailRecords(Date cutoffTime, int batchSize);
 }

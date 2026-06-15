@@ -12,6 +12,8 @@ import java.util.List;
 @EqualsAndHashCode(callSuper = true)
 public class TicketBatchRegisterBo extends BaseEntity {
 
+    private Long platformId;
+    private Integer count;
     private List<Long> phoneIds;
     private String supplier;
     private String countryCode;

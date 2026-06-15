@@ -22,11 +22,15 @@ public class TicketOrderExecution extends TenantEntity {
     private Long executionId;
 
     private Long taskId;
+    private Long batchTaskId;
+    private Long batchItemId;
     private Long platformId;
     private Long accountId;
+    private Long lotteryScheduleId;
     private String purchaseType;
     private Integer purchaseQuantity;
     private String configSnapshot;
+    private String lotteryEventUrl;
     private Long scheduleVersion;
     private String currentStep;
     private String stepStatus;
@@ -36,6 +40,9 @@ public class TicketOrderExecution extends TenantEntity {
     private String executionStatus;
     private String resultMessage;
     private String rawResult;
+    private String lotteryResultStatus;
+    private Long lotteryResultMailRecordId;
+    private Date lotteryResultAt;
     private String workerId;
     private Integer attemptCount;
     private Date heartbeatAt;

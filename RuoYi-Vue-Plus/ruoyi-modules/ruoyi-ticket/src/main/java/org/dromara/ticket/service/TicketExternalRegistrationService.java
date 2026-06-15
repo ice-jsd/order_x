@@ -46,9 +46,11 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class TicketExternalRegistrationService {
 
+    private static final String JUMP_SHOP_PLATFORM_CODE = "jump-shop";
     private static final String ACCOUNT_PENDING_REGISTER = "pending_register";
     private static final String ACCOUNT_PENDING_ACTIVATION = "pending_activation";
     private static final String ACCOUNT_ACTIVATED = "activated";
+    private static final int LAST_ERROR_MAX_LENGTH = 500;
     private static final List<String> ACTIVE_RELATION_STATUSES = List.of(
         "registering", "verification_pending", "registered", "logged_in"
     );
@@ -82,20 +84,22 @@ public class TicketExternalRegistrationService {
         TicketPlatformConfig platform = requirePlatformByCode(platformCode);
 
         TicketMailboxAccount mailbox = selectAvailableMailbox(platform.getPlatformId());
-        PhoneLease phoneLease = acquirePhoneLease(platform.getPlatformId());
-        String phoneNumber = phoneLease.phoneNumber();
-        int countdown = phoneLease.countdown();
-        Date leaseExpireTime = new Date(System.currentTimeMillis() + countdown * 1000L);
-        TicketPhoneNumber phone = getOrCreatePhone(phoneNumber);
+        boolean jumpShopPlatform = isJumpShopPlatform(platform);
+        String randomPhoneNumber = jumpShopPlatform ? generateRandomJapanPhoneNumber(platform.getPlatformId()) : null;
+        PhoneLease phoneLease = jumpShopPlatform ? null : acquirePhoneLease(platform.getPlatformId());
+        String phoneNumber = jumpShopPlatform ? randomPhoneNumber : phoneLease.phoneNumber();
+        int countdown = phoneLease == null ? 0 : phoneLease.countdown();
+        Date leaseExpireTime = phoneLease == null ? null : new Date(System.currentTimeMillis() + countdown * 1000L);
+        TicketPhoneNumber phone = phoneLease == null ? null : getOrCreatePhone(phoneNumber);
 
         String platformPassword = mailbox.getUsername() + "@ABC";
         GeneratedProfile profile = generateProfile();
         TicketManagedAccount account = new TicketManagedAccount();
         account.setPlatformId(platform.getPlatformId());
-        account.setPhoneId(phone.getPhoneId());
+        account.setPhoneId(phone == null ? null : phone.getPhoneId());
         account.setEmail(mailbox.getEmail());
         account.setAccountInfo(toJson(buildAccountInfo(profile, platformPassword)));
-        account.setReqData(toJson(buildReqData(mailbox, phone, phoneLease, leaseExpireTime, countdown)));
+        account.setReqData(toJson(buildReqData(mailbox, phone, phoneNumber, phoneLease, leaseExpireTime, countdown)));
         account.setAccountStatus(ACCOUNT_PENDING_REGISTER);
         account.setLoginStatus("offline");
         account.setLastLoginTime(null);
@@ -113,22 +117,24 @@ public class TicketExternalRegistrationService {
             throw new ServiceException("邮箱账号已被占用，请重试");
         }
 
-        TicketPhonePlatformRelation relation = relationMapper.selectOne(new LambdaQueryWrapper<TicketPhonePlatformRelation>()
-            .eq(TicketPhonePlatformRelation::getPlatformId, platform.getPlatformId())
-            .eq(TicketPhonePlatformRelation::getPhoneId, phone.getPhoneId()), false);
-        if (relation == null) {
-            relation = new TicketPhonePlatformRelation();
-        }
-        relation.setPhoneId(phone.getPhoneId());
-        relation.setPlatformId(platform.getPlatformId());
-        relation.setAccountId(account.getAccountId());
-        relation.setStatus("registering");
-        relation.setLastError(null);
-        relation.setLastOperateTime(new Date());
-        if (relation.getRelationId() == null) {
-            relationMapper.insert(relation);
-        } else {
-            relationMapper.updateById(relation);
+        if (phone != null) {
+            TicketPhonePlatformRelation relation = relationMapper.selectOne(new LambdaQueryWrapper<TicketPhonePlatformRelation>()
+                .eq(TicketPhonePlatformRelation::getPlatformId, platform.getPlatformId())
+                .eq(TicketPhonePlatformRelation::getPhoneId, phone.getPhoneId()), false);
+            if (relation == null) {
+                relation = new TicketPhonePlatformRelation();
+            }
+            relation.setPhoneId(phone.getPhoneId());
+            relation.setPlatformId(platform.getPlatformId());
+            relation.setAccountId(account.getAccountId());
+            relation.setStatus("registering");
+            relation.setLastError(null);
+            relation.setLastOperateTime(new Date());
+            if (relation.getRelationId() == null) {
+                relationMapper.insert(relation);
+            } else {
+                relationMapper.updateById(relation);
+            }
         }
 
         TicketExternalRegisterAccountVo vo = new TicketExternalRegisterAccountVo();
@@ -147,7 +153,7 @@ public class TicketExternalRegistrationService {
         vo.setResidence(profile.residence());
         vo.setLanguage("日本語");
         vo.setPhoneLeaseExpireTime(leaseExpireTime);
-        vo.setPhoneCountdownSeconds(countdown);
+        vo.setPhoneCountdownSeconds(phoneLease == null ? null : countdown);
         return R.ok(vo);
     }
 
@@ -279,6 +285,18 @@ public class TicketExternalRegistrationService {
         TicketSmsProviderClient.SmsEquipResult equipResult = smsProviderClient.queryCurrentEquip(phoneResult.getMsisdn());
         String phoneNumber = StrUtil.blankToDefault(equipResult.getMsisdn(), phoneResult.getMsisdn());
         if (StrUtil.isBlank(phoneNumber)) {
+            log.warn(
+                "sms provider returned empty phone, platformId={}, phoneReqid={}, phoneEquipno={}, phoneStatus={}, equipReqid={}, equipEquipno={}, equipStatus={}, phoneRaw={}, equipRaw={}",
+                platformId,
+                phoneResult.getReqid(),
+                phoneResult.getEquipno(),
+                phoneResult.getEquipstatus(),
+                equipResult.getReqid(),
+                equipResult.getEquipno(),
+                equipResult.getEquipstatus(),
+                phoneResult.getRawData(),
+                equipResult.getRawData()
+            );
             throw new ServiceException("短信平台未返回手机号，请稍后重试");
         }
         if (phoneExistsInPlatform(platformId, phoneNumber)) {
@@ -305,6 +323,19 @@ public class TicketExternalRegistrationService {
         TicketSmsProviderClient.SmsEquipResult equipResult = smsProviderClient.queryCurrentEquip(phoneResult.getMsisdn());
         String phoneNumber = StrUtil.blankToDefault(equipResult.getMsisdn(), phoneResult.getMsisdn());
         if (StrUtil.isBlank(phoneNumber)) {
+            log.warn(
+                "sms provider returned empty phone on reacquire, accountId={}, expiredPhone={}, phoneReqid={}, phoneEquipno={}, phoneStatus={}, equipReqid={}, equipEquipno={}, equipStatus={}, phoneRaw={}, equipRaw={}",
+                account.getAccountId(),
+                expiredPhoneNumber,
+                phoneResult.getReqid(),
+                phoneResult.getEquipno(),
+                phoneResult.getEquipstatus(),
+                equipResult.getReqid(),
+                equipResult.getEquipno(),
+                equipResult.getEquipstatus(),
+                phoneResult.getRawData(),
+                equipResult.getRawData()
+            );
             throw new ServiceException("短信平台重新取号未返回手机号，请稍后重试");
         }
         if (phoneExistsInPlatform(account.getPlatformId(), phoneNumber, account.getAccountId())) {
@@ -406,15 +437,7 @@ public class TicketExternalRegistrationService {
     }
 
     private PhoneLease mockPhoneLease(Long platformId) {
-        String phoneNumber;
-        int attempts = 0;
-        do {
-            attempts++;
-            phoneNumber = "070" + RandomUtil.randomNumbers(8);
-            if (attempts > 100) {
-                throw new ServiceException("随机日本手机号生成失败，请重试");
-            }
-        } while (phoneExistsInPlatform(platformId, phoneNumber));
+        String phoneNumber = generateRandomJapanPhoneNumber(platformId);
         return new PhoneLease(
             phoneNumber,
             "mock-random-jp",
@@ -530,18 +553,20 @@ public class TicketExternalRegistrationService {
                                             String reqData, String lastError) {
         String mergedAccountInfo = mergeJson(account.getAccountInfo(), accountInfo);
         String mergedReqData = mergeJson(account.getReqData(), reqData);
+        String normalizedLastError = fitLastError(lastError);
         accountMapper.update(null, new LambdaUpdateWrapper<TicketManagedAccount>()
             .eq(TicketManagedAccount::getAccountId, account.getAccountId())
             .set(TicketManagedAccount::getAccountStatus, accountStatus)
             .set(TicketManagedAccount::getAccountInfo, mergedAccountInfo)
             .set(TicketManagedAccount::getReqData, mergedReqData)
-            .set(TicketManagedAccount::getLastError, lastError));
+            .set(TicketManagedAccount::getLastError, normalizedLastError));
     }
 
     private void updateRelation(TicketManagedAccount account, String status, String lastError, Date now) {
         if (account.getPhoneId() == null) {
             return;
         }
+        String normalizedLastError = fitLastError(lastError);
         TicketPhonePlatformRelation relation = relationMapper.selectOne(new LambdaQueryWrapper<TicketPhonePlatformRelation>()
             .eq(TicketPhonePlatformRelation::getPlatformId, account.getPlatformId())
             .eq(TicketPhonePlatformRelation::getPhoneId, account.getPhoneId()), false);
@@ -551,7 +576,7 @@ public class TicketExternalRegistrationService {
             relation.setPhoneId(account.getPhoneId());
             relation.setAccountId(account.getAccountId());
             relation.setStatus(status);
-            relation.setLastError(lastError);
+            relation.setLastError(normalizedLastError);
             relation.setLastOperateTime(now);
             relationMapper.insert(relation);
             return;
@@ -560,8 +585,15 @@ public class TicketExternalRegistrationService {
             .eq(TicketPhonePlatformRelation::getRelationId, relation.getRelationId())
             .set(TicketPhonePlatformRelation::getAccountId, account.getAccountId())
             .set(TicketPhonePlatformRelation::getStatus, status)
-            .set(TicketPhonePlatformRelation::getLastError, lastError)
+            .set(TicketPhonePlatformRelation::getLastError, normalizedLastError)
             .set(TicketPhonePlatformRelation::getLastOperateTime, now));
+    }
+
+    private String fitLastError(String value) {
+        if (value == null || value.length() <= LAST_ERROR_MAX_LENGTH) {
+            return value;
+        }
+        return value.substring(0, LAST_ERROR_MAX_LENGTH - 3) + "...";
     }
 
     private GeneratedProfile generateProfile() {
@@ -575,7 +607,7 @@ public class TicketExternalRegistrationService {
         return new GeneratedProfile(
             FAMILY_NAMES.get(RandomUtil.randomInt(FAMILY_NAMES.size())),
             GIVEN_NAMES.get(RandomUtil.randomInt(GIVEN_NAMES.size())),
-            RandomUtil.randomBoolean() ? "male" : "female",
+            "unselect",
             year,
             month,
             RandomUtil.randomInt(1, maxDay + 1),
@@ -603,22 +635,42 @@ public class TicketExternalRegistrationService {
     }
 
     private Map<String, Object> buildReqData(TicketMailboxAccount mailbox, TicketPhoneNumber phone,
+                                             String phoneNumber,
                                              PhoneLease phoneLease,
                                              Date leaseExpireTime, int countdown) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("mailboxId", mailbox.getMailboxId());
         map.put("mailboxUsername", mailbox.getUsername());
-        map.put("smsMock", phoneLease.mock());
-        map.put("smsEquipno", phoneLease.equipno());
-        map.put("smsAppid", phoneLease.appid());
-        map.put("phoneId", phone.getPhoneId());
-        map.put("phoneNumber", phone.getPhoneNumber());
-        map.put("phoneLeaseExpireTime", leaseExpireTime);
-        map.put("phoneCountdownSeconds", countdown);
-        map.put("smsRequestId", phoneLease.requestId());
-        map.put("smsGetNewPhone", phoneLease.getNewPhonePayload());
-        map.put("smsEquip", phoneLease.equipPayload());
+        map.put("phoneId", phone == null ? null : phone.getPhoneId());
+        map.put("phoneNumber", StrUtil.blankToDefault(phoneNumber, phone == null ? null : phone.getPhoneNumber()));
+        if (phoneLease != null) {
+            map.put("smsMock", phoneLease.mock());
+            map.put("smsEquipno", phoneLease.equipno());
+            map.put("smsAppid", phoneLease.appid());
+            map.put("phoneLeaseExpireTime", leaseExpireTime);
+            map.put("phoneCountdownSeconds", countdown);
+            map.put("smsRequestId", phoneLease.requestId());
+            map.put("smsGetNewPhone", phoneLease.getNewPhonePayload());
+            map.put("smsEquip", phoneLease.equipPayload());
+        }
         return map;
+    }
+
+    private boolean isJumpShopPlatform(TicketPlatformConfig platform) {
+        return platform != null && StrUtil.equalsIgnoreCase(JUMP_SHOP_PLATFORM_CODE, platform.getPlatformCode());
+    }
+
+    private String generateRandomJapanPhoneNumber(Long platformId) {
+        String phoneNumber;
+        int attempts = 0;
+        do {
+            attempts++;
+            phoneNumber = "070" + RandomUtil.randomNumbers(8);
+            if (attempts > 100) {
+                throw new ServiceException("随机日本手机号生成失败，请重试");
+            }
+        } while (phoneExistsInPlatform(platformId, phoneNumber));
+        return phoneNumber;
     }
 
     private TicketExternalSmsCodeVo buildSmsWaitVo(String phoneNumber, Date leaseExpireTime,

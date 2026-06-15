@@ -7,6 +7,7 @@ import org.dromara.common.core.exception.ServiceException;
 import org.dromara.common.core.utils.StringUtils;
 import org.dromara.ticket.config.TicketOrderExecutorProperties;
 import org.dromara.ticket.domain.dto.TicketOrderDispatchRequest;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.connection.stream.StreamRecords;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -27,6 +28,7 @@ public class TicketOrderExecutorClient {
 
     private final TicketOrderExecutorProperties properties;
     private final ObjectMapper objectMapper;
+    @Qualifier("stringRedisTemplate")
     private final StringRedisTemplate stringRedisTemplate;
     private final HttpClient httpClient = HttpClient.newBuilder().build();
 

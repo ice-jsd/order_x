@@ -89,35 +89,53 @@ public class LivePocketAdapter implements TicketPlatformAdapter {
         if (TicketOrderFlowSupport.isLottery(purchaseType)) {
             Map<String, Object> template = new LinkedHashMap<>();
             template.put("lotteryEntryUrl", "");
+            template.put("lotterySubmitUrl", "");
             template.put("entryQuantity", 1);
             template.put("notificationPreference", "email");
-            template.put("notes", "抽票链路首版仅支持配置建模，不执行真实请求");
+            template.put("formFields", new LinkedHashMap<>());
+            template.put("successKeywords", List.of("申込", "応募", "完了"));
+            template.put("failureKeywords", List.of("エラー", "失敗", "入力してください"));
+            template.put("notes", "抽票由 Python 执行器使用账号登录上下文提交");
             return TicketOrderFlowSupport.buildTemplate(
                 platform,
                 purchaseType,
                 template,
-                List.of("lotteryEntryUrl", "entryQuantity", "notificationPreference", "notes")
+                List.of("lotteryEntryUrl", "lotterySubmitUrl", "entryQuantity", "notificationPreference", "formFields", "successKeywords", "failureKeywords", "notes")
             );
         }
 
         Map<String, Object> template = new LinkedHashMap<>();
-        template.put("ticketsPageUrl", "");
+        template.put("eventUrl", "");
+        template.put("ticketEntryUrl", "");
+        template.put("selectedSessions", List.of());
+        template.put("quantityMode", "auto_max");
+        template.put("purchaseQuantity", 1);
         template.put("ticketQuantity", 1);
+        template.put("paymentMode", "cod_store");
+        template.put("paymentProvider", "lawson");
         template.put("paymentMethod", "cvs");
-        template.put("sbpsWebCvsType", "016");
+        template.put("sbpsWebCvsType", "002");
         template.put("followNotification", 1);
         template.put("purchaseAgreementContent", 1);
+        template.put("notes", "普通抢票由 Python 执行器在运行时自动选择当前最大可购数量提交，并固定使用 Lawson 便利店支付");
         return TicketOrderFlowSupport.buildTemplate(
             platform,
             purchaseType,
             template,
             List.of(
-                "ticketsPageUrl",
+                "eventUrl",
+                "ticketEntryUrl",
+                "selectedSessions",
+                "quantityMode",
+                "purchaseQuantity",
                 "ticketQuantity",
+                "paymentMode",
+                "paymentProvider",
                 "paymentMethod",
                 "sbpsWebCvsType",
                 "followNotification",
-                "purchaseAgreementContent"
+                "purchaseAgreementContent",
+                "notes"
             )
         );
     }

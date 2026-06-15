@@ -35,7 +35,7 @@ spring:
     # 动态数据源文档 https://www.kancloud.cn/tracy5546/dynamic-datasource/content
     dynamic:
       # 性能分析插件(有性能损耗 不建议生产环境使用)
-      p6spy: true
+      p6spy: false
       # 设置默认的数据源或者数据源组,默认值即为 master
       primary: master
       # 严格模式 匹配不到数据源则报错
@@ -47,7 +47,7 @@ spring:
           driverClassName: com.mysql.cj.jdbc.Driver
           # jdbc 所有参数配置参考 https://lionli.blog.csdn.net/article/details/122018562
           # rewriteBatchedStatements=true 批处理优化 大幅提升批量插入更新删除性能(对数据库有性能损耗 使用批量操作应考虑性能问题)
-          url: jdbc:mysql://localhost:3306/order_x?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8&autoReconnect=true&rewriteBatchedStatements=true&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true
+          url: jdbc:mysql://localhost:3306/order_x?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=Asia%2FTokyo&autoReconnect=true&rewriteBatchedStatements=true&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true
           username: root
           password: 123456
 #        # 从库数据源
@@ -55,7 +55,7 @@ spring:
 #          lazy: true
 #          type: ${spring.datasource.type}
 #          driverClassName: com.mysql.cj.jdbc.Driver
-#          url: jdbc:mysql://localhost:3306/ry-vue?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8&autoReconnect=true&rewriteBatchedStatements=true&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true
+#          url: jdbc:mysql://localhost:3306/ry-vue?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=Asia%2FTokyo&autoReconnect=true&rewriteBatchedStatements=true&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true
 #          username:
 #          password:
 #        oracle:
@@ -268,3 +268,30 @@ justauth:
       client-id: 10**********6
       client-secret: 1f7d08**********5b7**********29e
       redirect-uri: ${justauth.address}/social-callback?source=gitea
+
+--- # ticket 本地执行器地址
+ticket:
+  record-cleanup:
+    enabled: true
+    mail-record-retention-days: 30
+    order-execution-retention-days: 30
+    cron: "0 30 3 * * ?"
+    batch-size: 1000
+  order-executor:
+    base-url: "http://127.0.0.1:8099"
+  python-executor:
+    base-url: "http://127.0.0.1:8098"
+    backend-base-url: "http://127.0.0.1:8080/ticket/external/account"
+    profile-timeout-ms: 900000
+    redis:
+      host: "127.0.0.1"
+      port: 6379
+      database: 0
+      timeout: 10s
+      connection-minimum-idle-size: 32
+      connection-pool-size: 512
+      subscription-connection-pool-size: 32
+      retry-attempts: 8
+      retry-interval-ms: 1000
+      ssl: false
+

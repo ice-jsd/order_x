@@ -10,6 +10,8 @@ import java.util.Map;
 
 public interface ITicketOpsService {
 
+    TicketDashboardOverviewVo selectDashboardOverview();
+
     TableDataInfo<TicketPlatformConfigVo> selectPlatformPage(TicketPlatformConfigBo bo, PageQuery pageQuery);
 
     TicketPlatformConfigVo selectPlatformById(Long platformId);
@@ -36,11 +38,17 @@ public interface ITicketOpsService {
 
     TableDataInfo<TicketManagedAccountVo> selectAccountPage(TicketManagedAccountBo bo, PageQuery pageQuery);
 
+    TicketSelectableAccountIdsVo selectSelectableAccountIds(TicketManagedAccountBo bo);
+
     TableDataInfo<TicketPhoneNumberVo> selectBindablePhonePage(Long platformId, TicketPhoneNumberBo bo, PageQuery pageQuery);
 
     int createManagedAccount(TicketManagedAccountCreateBo bo);
 
+    TicketHandsFormQuickCreateResultVo quickCreateHandsFormAccounts(TicketHandsFormQuickCreateBo bo);
+
     int updateManagedAccount(TicketManagedAccountUpdateBo bo);
+
+    int updateManagedAccountLastName(Long accountId, TicketManagedAccountLastNameBo bo);
 
     int removeManagedAccounts(Long[] accountIds);
 
@@ -54,11 +62,17 @@ public interface ITicketOpsService {
 
     java.util.List<TicketRegistrationBatchDetailVo> selectRegistrationBatchDetails(Long batchId);
 
+    int updateRegistrationBatchStatus(Long batchId, TicketBatchStatusUpdateBo bo);
+
     TableDataInfo<TicketLoginBatchVo> selectLoginBatchPage(TicketLoginBatchBo bo, PageQuery pageQuery);
 
     TicketLoginBatchVo selectLoginBatchById(Long batchId);
 
     java.util.List<TicketLoginBatchDetailVo> selectLoginBatchDetails(Long batchId);
+
+    R<Void> submitLoginEmailCode(Long batchId, Long detailId, TicketLoginEmailCodeBo bo);
+
+    int updateLoginBatchStatus(Long batchId, TicketBatchStatusUpdateBo bo);
 
     TableDataInfo<TicketEventConfigVo> selectEventPage(TicketEventConfigBo bo, PageQuery pageQuery);
 
@@ -74,15 +88,41 @@ public interface ITicketOpsService {
 
     TicketSaleTaskVo selectSaleTaskById(Long taskId);
 
+    TicketSaleTaskProcessVo selectSaleTaskProcess(Long taskId);
+
+    TableDataInfo<TicketOrderExecutionVo> selectSaleTaskProcessExecutions(Long taskId, String status, Long scheduleId, PageQuery pageQuery);
+
     int saveSaleTask(TicketSaleTaskBo bo);
 
     int updateSaleTask(TicketSaleTaskBo bo);
+
+    int cancelSaleTask(Long taskId);
 
     int removeSaleTasks(Long[] taskIds);
 
     R<Long> executeSaleTask(Long taskId);
 
+    R<Long> executeSaleTaskNow(Long taskId);
+
+    R<Long> retryFailedLotteryExecutions(Long taskId);
+
+    TableDataInfo<TicketLotteryBatchTaskVo> selectLotteryBatchTaskPage(TicketLotteryBatchTaskBo bo, PageQuery pageQuery);
+
+    TicketLotteryBatchTaskVo selectLotteryBatchTaskById(Long batchTaskId);
+
+    TicketLotteryBatchTaskProcessVo selectLotteryBatchTaskProcess(Long batchTaskId);
+
+    int saveLotteryBatchTask(TicketLotteryBatchTaskBo bo);
+
+    int updateLotteryBatchTask(TicketLotteryBatchTaskBo bo);
+
+    int updateLotteryBatchTaskStatus(Long batchTaskId, TicketBatchStatusUpdateBo bo);
+
+    R<Long> executeLotteryBatchTaskNow(Long batchTaskId);
+
     TableDataInfo<TicketOrderExecutionVo> selectOrderExecutionPage(TicketOrderExecutionBo bo, PageQuery pageQuery);
+
+    TicketOrderExecutionVo selectOrderExecutionDetail(Long executionId);
 
     int markOrderExecutionPaid(Long executionId, TicketOrderExecutionPaymentBo bo);
 
@@ -93,6 +133,12 @@ public interface ITicketOpsService {
     R<Void> reportExternalLoginSuccess(TicketExternalLoginReportBo bo);
 
     R<Void> submitExternalLoginReqData(TicketExternalLoginReqDataBo bo);
+
+    R<Void> requestExternalLoginEmailCode(TicketExternalLoginCodeRequestBo bo);
+
+    R<TicketExternalManualLoginCodeVo> fetchExternalLoginEmailCode(String requestId);
+
+    R<Void> markExternalLoginEmailCodeInvalid(TicketExternalLoginCodeInvalidBo bo);
 
     R<TicketExternalOfflineAccountVo> fetchNextOfflineAccount(String platformCode);
 
