@@ -1,1 +1,16 @@
 /logs/
+/auto-py/.env.local
+.env*
+!.env.example
+!auto-py/.env.example
+.playwright-mcp/
+auto-py/.runtime/
+**/__pycache__/
+*.pyc
+*.log
+logs-ticket-*.txt
+backups/db/
+tmp/
+jump-shop-quick-checkout/cookies*.csv
+jump-shop-quick-checkout/quick_checkout.config*.json
+chrome-extensions/**/*.zip

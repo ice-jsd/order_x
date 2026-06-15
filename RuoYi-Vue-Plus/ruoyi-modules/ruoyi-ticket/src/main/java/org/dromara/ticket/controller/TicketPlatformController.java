@@ -51,7 +51,7 @@ public class TicketPlatformController extends BaseController {
     }
 
     @SaCheckPermission("ticket:platform:add")
-    @Log(title = "票务平台", businessType = BusinessType.INSERT)
+    @Log(title = "抢购平台", businessType = BusinessType.INSERT)
     @RepeatSubmit
     @PostMapping
     public R<Void> add(@RequestBody TicketPlatformConfigBo bo) {
@@ -59,7 +59,7 @@ public class TicketPlatformController extends BaseController {
     }
 
     @SaCheckPermission("ticket:platform:edit")
-    @Log(title = "票务平台", businessType = BusinessType.UPDATE)
+    @Log(title = "抢购平台", businessType = BusinessType.UPDATE)
     @RepeatSubmit
     @PutMapping
     public R<Void> edit(@RequestBody TicketPlatformConfigBo bo) {
@@ -67,10 +67,10 @@ public class TicketPlatformController extends BaseController {
     }
 
     @SaCheckPermission("ticket:platform:remove")
-    @Log(title = "票务平台", businessType = BusinessType.DELETE)
+    @Log(title = "抢购平台", businessType = BusinessType.DELETE)
     @DeleteMapping("/{platformIds}")
     public R<Void> remove(@PathVariable Long[] platformIds) {
-        throw new ServiceException("平台接入仅允许禁用，不允许删除");
+        throw new ServiceException("抢购平台仅允许禁用，不允许删除");
     }
 
 }

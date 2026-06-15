@@ -13,6 +13,7 @@ import org.dromara.common.core.exception.ServiceException;
 import org.dromara.common.core.exception.SseException;
 import org.dromara.common.core.exception.base.BaseException;
 import org.dromara.common.core.utils.StreamUtils;
+import org.dromara.common.core.utils.StringUtils;
 import org.dromara.common.json.utils.JsonUtils;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
@@ -31,6 +32,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.servlet.NoHandlerFoundException;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 /**
  * 全局异常处理器
@@ -210,7 +212,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(JsonParseException.class)
     public R<Void> handleJsonParseException(JsonParseException e, HttpServletRequest request) {
         String requestURI = request.getRequestURI();
-        log.error("请求地址'{}' 发生 JSON 解析异常: {}", requestURI, e.getMessage());
+        log.error("请求地址'{}' 发生 JSON 解析异常: {}, 请求体预览: {}", requestURI, e.getMessage(), readRequestBodyPreview(request));
         return R.fail(HttpStatus.HTTP_BAD_REQUEST, "请求数据格式错误（JSON 解析失败）：" + e.getMessage());
     }
 
@@ -219,8 +221,22 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public R<Void> handleHttpMessageNotReadableException(HttpMessageNotReadableException e, HttpServletRequest request) {
-        log.error("请求地址'{}', 参数解析失败: {}", request.getRequestURI(), e.getMessage());
+        log.error("请求地址'{}', 参数解析失败: {}, 请求体预览: {}", request.getRequestURI(), e.getMessage(), readRequestBodyPreview(request));
         return R.fail(HttpStatus.HTTP_BAD_REQUEST, "请求参数格式错误：" + e.getMostSpecificCause().getMessage());
+    }
+
+    private String readRequestBodyPreview(HttpServletRequest request) {
+        try {
+            byte[] bytes = request.getInputStream().readAllBytes();
+            if (bytes.length == 0) {
+                return "<empty>";
+            }
+            String body = new String(bytes, StandardCharsets.UTF_8);
+            body = body.replace("\r", "\\r").replace("\n", "\\n");
+            return StringUtils.substring(body, 0, 3000);
+        } catch (IOException ex) {
+            return "<unavailable:" + ex.getMessage() + ">";
+        }
     }
 
     /**

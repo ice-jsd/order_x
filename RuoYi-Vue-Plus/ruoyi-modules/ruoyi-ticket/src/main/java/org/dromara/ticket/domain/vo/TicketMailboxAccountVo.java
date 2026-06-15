@@ -38,4 +38,9 @@ public class TicketMailboxAccountVo implements Serializable {
     private String lastMailSyncError;
     private Date createTime;
     private String usedAccountEmail;
+    private Long matchedMailRecordId;
+    private String matchedMailSubject;
+    private String matchedMailFrom;
+    private Date matchedMailReceivedAt;
+    private String matchedMailExcerpt;
 }

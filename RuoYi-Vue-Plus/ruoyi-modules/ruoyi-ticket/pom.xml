@@ -34,6 +34,10 @@
         </dependency>
         <dependency>
             <groupId>org.dromara</groupId>
+            <artifactId>ruoyi-common-excel</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.dromara</groupId>
             <artifactId>ruoyi-common-security</artifactId>
         </dependency>
         <dependency>
@@ -59,6 +63,10 @@
         <dependency>
             <groupId>org.dromara</groupId>
             <artifactId>ruoyi-common-sse</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.dromara</groupId>
+            <artifactId>ruoyi-common-mail</artifactId>
         </dependency>
         <dependency>
             <groupId>com.sun.mail</groupId>

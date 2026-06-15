@@ -24,6 +24,10 @@ public class TicketLoginBatchDetailVo implements Serializable {
     private String resultMessage;
     private String reqData;
     private Date executedAt;
+    private String loginMode;
+    private String verifyCodeRequestId;
+    private Date verifyCodeExpiresAt;
+    private Integer verifyCodeAttemptCount;
     private String email;
     private String accountInfo;
     private String phoneNumber;

@@ -8,7 +8,30 @@ import { transformElegantRoutesToVueRoutes } from '../elegant/transform';
  *
  * @link https://github.com/soybeanjs/elegant-router?tab=readme-ov-file#custom-route
  */
-const customRoutes: CustomRoute[] = [];
+const customRoutes: ElegantRoute[] = [
+  {
+    name: 'ticket',
+    path: '/ticket',
+    component: 'layout.base',
+    meta: {
+      title: 'ticket',
+      i18nKey: 'route.ticket',
+      hideInMenu: true
+    },
+    children: [
+      {
+        name: 'ticket_registration-batch',
+        path: '/ticket/registration-batch',
+        component: 'view.ticket_registration-batch',
+        meta: {
+          title: 'ticket_registration-batch',
+          i18nKey: 'route.ticket_registration-batch',
+          hideInMenu: true
+        }
+      }
+    ]
+  }
+];
 
 /** create routes when the auth route mode is static */
 export function createStaticRoutes() {

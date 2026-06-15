@@ -87,20 +87,12 @@ public class XssHttpServletRequestWrapper extends HttpServletRequestWrapper {
             return super.getInputStream();
         }
 
-        // 为空，直接返回
-        String json = StrUtil.str(IoUtil.readBytes(super.getInputStream(), false), StandardCharsets.UTF_8);
-        if (StringUtils.isEmpty(json)) {
-            return super.getInputStream();
-        }
-
-        // xss过滤
-        json = HtmlUtil.cleanHtmlTag(json).trim();
-        byte[] jsonBytes = json.getBytes(StandardCharsets.UTF_8);
+        byte[] jsonBytes = IoUtil.readBytes(super.getInputStream(), false);
         final ByteArrayInputStream bis = IoUtil.toStream(jsonBytes);
         return new ServletInputStream() {
             @Override
             public boolean isFinished() {
-                return true;
+                return bis.available() == 0;
             }
 
             @Override

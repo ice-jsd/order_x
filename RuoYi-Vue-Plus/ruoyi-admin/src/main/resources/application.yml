@@ -83,6 +83,8 @@ spring:
   jackson:
     # 日期格式化
     date-format: yyyy-MM-dd HH:mm:ss
+    # 系统统一使用日本时区
+    time-zone: Asia/Tokyo
     serialization:
       # 格式化输出
       indent_output: false
@@ -96,6 +98,10 @@ spring:
 sa-token:
   # token名称 (同时也是cookie名称)
   token-name: Authorization
+  # token有效期，单位秒，3天
+  timeout: 259200
+  # token活跃有效期，单位秒，3天
+  active-timeout: 259200
   # 是否允许同一账号并发登录 (为true时允许一起登录, 为false时新登录挤掉旧登录)
   is-concurrent: true
   # 在多人登录同一账号时，是否共用一个token (为true时所有登录共用一个token, 为false时每次登录新建一个token)
@@ -264,12 +270,51 @@ websocket:
       job-ttl-seconds: 86400
       heartbeat-timeout-seconds: 30
       auto-warmup-lead-ms: 3000
+    python-executor:
+      enabled: true
+      base-url: "http://127.0.0.1:8098"
+      backend-base-url: "http://127.0.0.1:8080/ticket/external/account"
+      profile-timeout-ms: 900000
+      redis:
+        host: "127.0.0.1"
+        port: 6379
+        database: 0
+        timeout: 10s
+        connection-minimum-idle-size: 32
+        connection-pool-size: 512
+        subscription-connection-pool-size: 32
+        retry-attempts: 8
+        retry-interval-ms: 1000
+        ssl: false
+      register-result-stream-key: "ticket:livepocket:register:stream:result"
+      register-result-last-id-key: "ticket:livepocket:register:result:last-id"
+      login-result-stream-key: "ticket:livepocket:login:stream:result"
+      login-result-last-id-key: "ticket:livepocket:login:result:last-id"
+      delayed-zset-key: "ticket:lottery:zset:delayed"
+      ready-queue-key: "ticket:lottery:stream:ready"
+      result-stream-key: "ticket:lottery:stream:result"
+      result-last-id-key: "ticket:lottery:result:last-id"
+      job-key-prefix: "ticket:lottery:job:"
+      account-lock-key-prefix: "ticket:lottery:lock:account:"
+      job-ttl-seconds: 604800
+      event-parse-ready-stream-key: "ticket:lottery:event-parse:stream:ready"
+      event-parse-result-stream-key: "ticket:lottery:event-parse:stream:result"
+      event-parse-job-key-prefix: "ticket:lottery:event-parse:job:"
+      event-parse-result-last-id-key: "ticket:lottery:event-parse:result:last-id"
+      event-parse-job-ttl-seconds: 3600
+      delayed-promote-batch-size: 100
+      queue-consume-batch-size: 50
+      delayed-poll-interval-ms: 1000
+      queue-poll-interval-ms: 1000
+    hands-form-extension:
+      enabled: true
+      api-secret: "change-me-hands-extension-secret"
     mail-reader:
       enabled: true
       host: "mail.gjcytech.com"
       port: 993
-      username: "orderx_admin"
-      password: "admin@orderx.top"
+      username: "admin"
+      password: "admin@gjcytech.com"
       folder: "INBOX"
       folders:
         - "INBOX"
@@ -284,9 +329,35 @@ websocket:
       read-timeout-ms: 60000
       ssl-trust-all: true
       auto-sync-enabled: true
+      global-sync-enabled: true
+      global-username: "mail-feed"
+      global-password: "mail-feed@ABC"
+      global-sync-fixed-delay-ms: 5000
+      global-folders:
+        - "INBOX"
+      global-scan-all-folders: false
+      global-max-scan-count: 200
+      global-recipient-headers:
+        - "X-Stalwart-Original-To"
+        - "Delivered-To"
+        - "X-Original-To"
+        - "Original-Recipient"
+        - "Envelope-To"
       sync-fixed-delay-ms: 120000
       sync-batch-size: 20
       body-excerpt-length: 1000
+    mail-forward:
+      enabled: true
+      host: "smtp.qq.com"
+      port: 465
+      auth: true
+      from: "178734336@qq.com"
+      user: "178734336@qq.com"
+      pass: "wkfwypyclhlrbicf"
+      starttls-enable: false
+      ssl-enable: true
+      timeout: 30000
+      connection-timeout: 30000
     stalwart:
       enabled: true
       base-url: "https://mail.gjcytech.com:9443"

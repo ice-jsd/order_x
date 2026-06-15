@@ -81,11 +81,11 @@ export const taskModeOptions = [
 export const taskStatusOptions = [
   { label: '待执行', value: 'draft' },
   { label: '执行中', value: 'executing' },
-  { label: '待支付', value: 'pending_payment' },
-  { label: '已支付', value: 'paid' },
+  { label: '已完成', value: 'completed' },
   { label: '部分完成', value: 'partial' },
   { label: '失败', value: 'failed' },
-  { label: '阻塞', value: 'blocked' }
+  { label: '阻塞', value: 'blocked' },
+  { label: '已取消', value: 'cancelled' }
 ];
 
 export const executionStatusOptions = [
@@ -96,7 +96,8 @@ export const executionStatusOptions = [
   { label: '已支付', value: 'paid' },
   { label: '阻塞', value: 'blocked' },
   { label: '失败', value: 'failed' },
-  { label: '超时', value: 'timeout' }
+  { label: '超时', value: 'timeout' },
+  { label: '已取消', value: 'cancelled' }
 ];
 
 export const purchaseTypeOptions = [
@@ -105,8 +106,10 @@ export const purchaseTypeOptions = [
 ];
 
 export const paymentStatusOptions = [
+  { label: '无需支付', value: 'not_required' },
+  { label: '等待抽选', value: 'lottery_waiting_result' },
   { label: '待线上支付', value: 'pending_online' },
-  { label: '待门店付款', value: 'offline_pending' },
+  { label: '待便利店支付', value: 'offline_pending' },
   { label: '待人工处理', value: 'manual_pending' },
   { label: '已支付', value: 'paid' }
 ];
@@ -135,11 +138,15 @@ export const auditStatusOptions = [
   { label: '告警', value: 'warn' }
 ];
 
+export const lotteryResultStatusOptions = [{ label: '已当选', value: 'selected' }];
+
 const phoneStatusLabelMap = Object.fromEntries(phoneStatusOptions.map(item => [String(item.value), item.label]));
 
 const colorMap: Record<string, string> = {
   true: 'success',
   false: 'warning',
+  not_required: 'default',
+  lottery_waiting_result: 'info',
   available: 'success',
   used: 'info',
   create_failed: 'error',
@@ -168,6 +175,7 @@ const colorMap: Record<string, string> = {
   success: 'success',
   failed: 'error',
   timeout: 'warning',
+  cancelled: 'default',
   warn: 'warning',
   manual_confirm: 'warning',
   auto_submit: 'info',
@@ -186,7 +194,9 @@ const colorMap: Record<string, string> = {
   selecting_fulfillment: 'warning',
   selecting_payment: 'warning',
   creating_order: 'info',
-  awaiting_payment: 'warning'
+  awaiting_payment: 'warning',
+  selected: 'success',
+  lottery_selected: 'success'
 };
 
 const labelMap: Record<string, string> = Object.fromEntries(
@@ -205,6 +215,7 @@ const labelMap: Record<string, string> = Object.fromEntries(
     ...executionStatusOptions,
     ...purchaseTypeOptions,
     ...paymentStatusOptions,
+    ...lotteryResultStatusOptions,
     ...orderStepStatusOptions,
     ...orderCurrentStepOptions,
     ...auditStatusOptions
@@ -214,13 +225,33 @@ const labelMap: Record<string, string> = Object.fromEntries(
 labelMap.true = '启用';
 labelMap.false = '停用';
 
+export function getTicketLabel(value?: string | number | boolean | null) {
+  const raw = value === null || value === undefined ? '' : String(value);
+  if (raw === 'timeout') return '失败';
+  if (raw === 'pending') return '待执行';
+  return labelMap[raw] || raw || '-';
+}
+
 export function renderTicketTag(value?: string | number | boolean | null) {
   const raw = value === null || value === undefined ? '' : String(value);
   return h(
     NTag,
     { size: 'small', type: (colorMap[raw] as NaiveUI.ThemeColor) || 'default', bordered: false },
-    { default: () => labelMap[raw] || raw || '-' }
+    { default: () => getTicketLabel(raw) }
   );
+}
+
+const paymentStatusVisibleExecutionStatuses = new Set(['submitted', 'pending_payment', 'paid', 'completed']);
+
+export function shouldRenderTicketPaymentStatus(row?: { executionStatus?: string | null; paymentStatus?: string | null }) {
+  if (!row?.paymentStatus || row.paymentStatus === 'not_required') {
+    return false;
+  }
+  return paymentStatusVisibleExecutionStatuses.has(row.executionStatus || '');
+}
+
+export function renderTicketPaymentTag(row?: { executionStatus?: string | null; paymentStatus?: string | null }) {
+  return shouldRenderTicketPaymentStatus(row) ? renderTicketTag(row?.paymentStatus) : null;
 }
 
 export function renderPhoneStatusTag(value?: string | number | boolean | null) {
@@ -292,16 +323,18 @@ export function renderTicketJsonSummary(
 
   const prettyJson = JSON.stringify(parsed, null, 2);
   const summaryText = previewItems.length ? previewItems.join(' · ') : '查看详情';
+  const popoverMaxWidth = 'min(420px, calc(100vw - 48px))';
 
   return h(
     NPopover,
-    { trigger: 'hover', placement: 'left', width: 420 },
+    { trigger: 'hover', placement: 'top', width: 420, style: { maxWidth: popoverMaxWidth } },
     {
       trigger: () =>
         h(
           'div',
           {
-            class: 'max-w-220px cursor-help text-left'
+            class: 'cursor-help text-left',
+            style: { width: '100%', maxWidth: '220px', minWidth: 0, overflow: 'hidden' }
           },
           [
             h(
@@ -324,7 +357,9 @@ export function renderTicketJsonSummary(
         h(
           'pre',
           {
-            class: 'max-w-380px overflow-auto whitespace-pre-wrap break-all rounded-8px bg-#f6f8fb p-12px text-12px leading-18px text-#334155'
+            class:
+              'max-h-360px overflow-auto whitespace-pre-wrap break-all rounded-8px bg-#f6f8fb p-12px text-12px leading-18px text-#334155',
+            style: { maxWidth: popoverMaxWidth, boxSizing: 'border-box' }
           },
           prettyJson
         )

@@ -18,6 +18,7 @@ public class TicketManagedAccountUpdateBo extends BaseEntity {
     @NotBlank(message = "邮箱不能为空")
     private String email;
 
+    private Long phoneId;
     private String accountInfo;
     private String reqData;
     private String loginReqData;

@@ -12,4 +12,5 @@ public class TicketMailboxAccountBo extends BaseEntity {
 
     private String email;
     private String status;
+    private String mailKeyword;
 }

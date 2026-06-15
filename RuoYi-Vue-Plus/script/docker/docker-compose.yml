@@ -3,8 +3,8 @@ services:
     image: mysql:8.0.42
     container_name: mysql
     environment:
-      # 时区上海
-      TZ: Asia/Shanghai
+      # 时区东京
+      TZ: Asia/Tokyo
       # root 密码
       MYSQL_ROOT_PASSWORD: root
       # 初始化数据库(后续的初始化sql会在这个库执行)
@@ -30,8 +30,8 @@ services:
     image: nginx:1.23.4
     container_name: nginx-web
     environment:
-      # 时区上海
-      TZ: Asia/Shanghai
+      # 时区东京
+      TZ: Asia/Tokyo
     ports:
       - "80:80"
       - "443:443"
@@ -53,8 +53,8 @@ services:
     ports:
       - "6379:6379"
     environment:
-      # 时区上海
-      TZ: Asia/Shanghai
+      # 时区东京
+      TZ: Asia/Tokyo
     volumes:
       # 配置文件
       - /docker/redis/conf:/redis/config:rw
@@ -74,8 +74,8 @@ services:
       # 控制台端口
       - "9001:9001"
     environment:
-      # 时区上海
-      TZ: Asia/Shanghai
+      # 时区东京
+      TZ: Asia/Tokyo
       # 管理后台用户名
       MINIO_ROOT_USER: ruoyi
       # 管理后台密码，最小8个字符
@@ -102,8 +102,8 @@ services:
     image: ruoyi/ruoyi-server:5.6.0
     container_name: ruoyi-server1
     environment:
-      # 时区上海
-      TZ: Asia/Shanghai
+      # 时区东京
+      TZ: Asia/Tokyo
       SERVER_PORT: 8080
       SNAIL_PORT: 28080
     volumes:
@@ -118,8 +118,8 @@ services:
     image: ruoyi/ruoyi-server:5.6.0
     container_name: ruoyi-server2
     environment:
-      # 时区上海
-      TZ: Asia/Shanghai
+      # 时区东京
+      TZ: Asia/Tokyo
       SERVER_PORT: 8081
       SNAIL_PORT: 28081
     volumes:
@@ -134,8 +134,8 @@ services:
     image: ruoyi/ruoyi-monitor-admin:5.6.0
     container_name: ruoyi-monitor-admin
     environment:
-      # 时区上海
-      TZ: Asia/Shanghai
+      # 时区东京
+      TZ: Asia/Tokyo
     volumes:
       # 配置文件
       - /docker/monitor/logs/:/ruoyi/monitor/logs
@@ -146,8 +146,8 @@ services:
     image: ruoyi/ruoyi-snailjob-server:5.6.0
     container_name: ruoyi-snailjob-server
     environment:
-      # 时区上海
-      TZ: Asia/Shanghai
+      # 时区东京
+      TZ: Asia/Tokyo
     ports:
       - "8800:8800"
       - "17888:17888"
@@ -155,3 +155,4 @@ services:
       - /docker/snailjob/logs/:/ruoyi/snailjob/logs
     privileged: true
     network_mode: "host"
+

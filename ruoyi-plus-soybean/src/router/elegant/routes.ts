@@ -85,9 +85,7 @@ export const generatedRoutes: GeneratedRoute[] = [
     component: 'layout.base$view.home',
     meta: {
       title: 'home',
-      i18nKey: 'route.home',
-      icon: 'mdi:monitor-dashboard',
-      order: 1
+      i18nKey: 'route.home'
     }
   },
   {
@@ -345,6 +343,51 @@ export const generatedRoutes: GeneratedRoute[] = [
         }
       },
       {
+        name: 'ticket_jump-shop-profile',
+        path: '/ticket/jump-shop-profile',
+        component: 'view.ticket_jump-shop-profile',
+        meta: {
+          title: 'ticket_jump-shop-profile',
+          i18nKey: 'route.ticket_jump-shop-profile'
+        }
+      },
+      {
+        name: 'ticket_lottery-account-record',
+        path: '/ticket/lottery-account-record',
+        component: 'view.ticket_lottery-account-record',
+        meta: {
+          title: 'ticket_lottery-account-record',
+          i18nKey: 'route.ticket_lottery-account-record'
+        }
+      },
+      {
+        name: 'ticket_lottery-batch-task',
+        path: '/ticket/lottery-batch-task',
+        component: 'view.ticket_lottery-batch-task',
+        meta: {
+          title: 'ticket_lottery-batch-task',
+          i18nKey: 'route.ticket_lottery-batch-task'
+        }
+      },
+      {
+        name: 'ticket_mail-forward',
+        path: '/ticket/mail-forward',
+        component: 'view.ticket_mail-forward',
+        meta: {
+          title: 'ticket_mail-forward',
+          i18nKey: 'route.ticket_mail-forward'
+        }
+      },
+      {
+        name: 'ticket_mail-overview',
+        path: '/ticket/mail-overview',
+        component: 'view.ticket_mail-overview',
+        meta: {
+          title: 'ticket_mail-overview',
+          i18nKey: 'route.ticket_mail-overview'
+        }
+      },
+      {
         name: 'ticket_mailbox-account',
         path: '/ticket/mailbox-account',
         component: 'view.ticket_mailbox-account',
@@ -378,6 +421,15 @@ export const generatedRoutes: GeneratedRoute[] = [
         meta: {
           title: 'ticket_platform',
           i18nKey: 'route.ticket_platform'
+        }
+      },
+      {
+        name: 'ticket_registration-batch',
+        path: '/ticket/registration-batch',
+        component: 'view.ticket_registration-batch',
+        meta: {
+          title: 'ticket_registration-batch',
+          i18nKey: 'route.ticket_registration-batch'
         }
       },
       {

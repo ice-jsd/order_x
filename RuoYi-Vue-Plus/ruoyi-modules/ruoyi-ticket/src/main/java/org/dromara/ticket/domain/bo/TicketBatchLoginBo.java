@@ -12,6 +12,8 @@ import java.util.List;
 @EqualsAndHashCode(callSuper = true)
 public class TicketBatchLoginBo extends BaseEntity {
 
+    private Long platformId;
     private List<Long> accountIds;
     private String loginStatus;
+    private String loginMode;
 }

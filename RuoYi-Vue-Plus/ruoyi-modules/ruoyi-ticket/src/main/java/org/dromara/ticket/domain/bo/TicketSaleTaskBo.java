@@ -26,6 +26,9 @@ public class TicketSaleTaskBo extends BaseEntity {
     private Date scheduledTime;
     private Integer purchaseQuantity;
     private String taskOptions;
+    private String lotteryEventUrl;
+    private List<TicketLotteryEventSessionBo> selectedSessions;
     private String remark;
     private List<Long> accountIds;
+    private List<TicketSaleTaskScheduleBo> lotterySchedules;
 }

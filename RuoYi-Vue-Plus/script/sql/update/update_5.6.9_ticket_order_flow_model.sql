@@ -1,4 +1,4 @@
--- 商品抢购任务多流程建模
+-- 任务管理多流程建模
 
 ALTER TABLE `ticket_sale_task`
   ADD COLUMN `order_flow_type` varchar(32) DEFAULT 'direct_order' COMMENT '下单方式' AFTER `task_status`,

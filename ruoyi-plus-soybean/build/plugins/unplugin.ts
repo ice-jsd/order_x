@@ -15,6 +15,7 @@ export function setupUnplugin(viteEnv: Env.ImportMeta) {
 
   /** The name of the local icon collection */
   const collectionName = VITE_ICON_LOCAL_PREFIX.replace(`${VITE_ICON_PREFIX}-`, '');
+  const componentsDts = process.env.DISABLE_COMPONENTS_DTS === '1' ? false : 'src/typings/components.d.ts';
 
   const plugins: PluginOption[] = [
     Icons({
@@ -28,7 +29,7 @@ export function setupUnplugin(viteEnv: Env.ImportMeta) {
       defaultClass: 'inline-block'
     }),
     Components({
-      dts: 'src/typings/components.d.ts',
+      dts: componentsDts,
       types: [{ from: 'vue-router', names: ['RouterLink', 'RouterView'] }],
       resolvers: [
         NaiveUiResolver(),

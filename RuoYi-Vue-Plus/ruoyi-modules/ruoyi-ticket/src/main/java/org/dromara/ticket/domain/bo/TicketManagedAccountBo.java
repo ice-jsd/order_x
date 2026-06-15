@@ -19,4 +19,6 @@ public class TicketManagedAccountBo extends BaseEntity {
     private String email;
     private String accountStatus;
     private String loginStatus;
+    private String purchaseType;
+    private String lotteryEventUrl;
 }

@@ -5,10 +5,13 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.dromara.common.core.domain.R;
 import org.dromara.ticket.domain.bo.TicketExternalActivationConfirmBo;
+import org.dromara.ticket.domain.bo.TicketExternalLoginCodeInvalidBo;
+import org.dromara.ticket.domain.bo.TicketExternalLoginCodeRequestBo;
 import org.dromara.ticket.domain.bo.TicketExternalLoginReqDataBo;
 import org.dromara.ticket.domain.bo.TicketExternalLoginReportBo;
 import org.dromara.ticket.domain.bo.TicketExternalRegistrationConfirmBo;
 import org.dromara.ticket.domain.vo.TicketExternalOfflineAccountVo;
+import org.dromara.ticket.domain.vo.TicketExternalManualLoginCodeVo;
 import org.dromara.ticket.domain.vo.TicketExternalRegisterAccountVo;
 import org.dromara.ticket.domain.vo.TicketExternalSmsCodeVo;
 import org.dromara.ticket.domain.vo.TicketExternalVerifyCodeVo;
@@ -40,6 +43,22 @@ public class TicketExternalAccountController {
     @PostMapping("/login-req-data")
     public R<Void> submitLoginReqData(@Validated @RequestBody TicketExternalLoginReqDataBo bo) {
         return ticketOpsService.submitExternalLoginReqData(bo);
+    }
+
+    @PostMapping("/login-code-request")
+    public R<Void> requestLoginCode(@Validated @RequestBody TicketExternalLoginCodeRequestBo bo) {
+        return ticketOpsService.requestExternalLoginEmailCode(bo);
+    }
+
+    @GetMapping("/login-code")
+    public R<TicketExternalManualLoginCodeVo> fetchLoginCode(
+        @RequestParam @NotBlank(message = "requestId不能为空") String requestId) {
+        return ticketOpsService.fetchExternalLoginEmailCode(requestId);
+    }
+
+    @PostMapping("/login-code-invalid")
+    public R<Void> markLoginCodeInvalid(@Validated @RequestBody TicketExternalLoginCodeInvalidBo bo) {
+        return ticketOpsService.markExternalLoginEmailCodeInvalid(bo);
     }
 
     @GetMapping("/next-offline")

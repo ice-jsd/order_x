@@ -1,4 +1,6 @@
--- 商品抢购任务与下单执行改造
+SET NAMES utf8mb4;
+
+-- 任务管理与下单执行改造
 
 ALTER TABLE `ticket_platform_config`
   ADD COLUMN `order_submit_url` varchar(500) DEFAULT NULL COMMENT '下单接口地址' AFTER `callback_url`;
@@ -56,11 +58,11 @@ DELETE FROM `sys_role_menu` WHERE `menu_id` IN (20006, 20601, 20602, 20603, 2060
 DELETE FROM `sys_menu` WHERE `menu_id` IN (20601, 20602, 20603, 20604, 20006);
 
 UPDATE `sys_menu`
-SET `menu_name` = '商品抢购任务', `remark` = '商品抢购任务菜单'
+SET `menu_name` = '任务管理', `remark` = '任务管理菜单'
 WHERE `menu_id` = 20007;
 
 UPDATE `sys_menu`
-SET `menu_name` = '下单执行', `remark` = '下单执行菜单'
+SET `menu_name` = '订单列表', `remark` = '订单列表菜单'
 WHERE `menu_id` = 20008;
 
 UPDATE `sys_menu`

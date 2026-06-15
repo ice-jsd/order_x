@@ -17,7 +17,7 @@ public class TicketOrderExecutorProperties {
     /**
      * Go 执行器服务地址
      */
-    private String baseUrl = "http://127.0.0.1:8099";
+    private String baseUrl;
 
     /**
      * 调度接口路径

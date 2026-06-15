@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 CREATE TABLE IF NOT EXISTS `ticket_mailbox_account` (
   `mailbox_id` bigint(20) NOT NULL COMMENT '邮箱账号主键',
   `tenant_id` varchar(20) DEFAULT '000000' COMMENT '租户编号',

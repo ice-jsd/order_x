@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS `ticket_registration_batch_detail` (
   `detail_id` bigint(20) NOT NULL COMMENT '明细主键',
   `tenant_id` varchar(20) DEFAULT '000000' COMMENT '租户编号',
   `batch_id` bigint(20) NOT NULL COMMENT '注册批次主键',
-  `phone_id` bigint(20) NOT NULL COMMENT '号码主键',
+  `phone_id` bigint(20) DEFAULT NULL COMMENT '号码主键',
   `platform_id` bigint(20) NOT NULL COMMENT '平台主键',
   `execute_status` varchar(32) DEFAULT 'processing' COMMENT '执行状态',
   `result_message` varchar(500) DEFAULT NULL COMMENT '返回信息',

@@ -10,6 +10,7 @@ import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.mybatis.core.page.TableDataInfo;
 import org.dromara.common.web.core.BaseController;
 import org.dromara.ticket.domain.bo.TicketSaleTaskBo;
+import org.dromara.ticket.domain.vo.TicketSaleTaskProcessVo;
 import org.dromara.ticket.domain.vo.TicketSaleTaskVo;
 import org.dromara.ticket.service.ITicketOpsService;
 import org.springframework.validation.annotation.Validated;
@@ -35,8 +36,25 @@ public class TicketSaleTaskController extends BaseController {
         return R.ok(ticketOpsService.selectSaleTaskById(taskId));
     }
 
+    @SaCheckPermission("ticket:saleTask:query")
+    @GetMapping("/{taskId}/process")
+    public R<TicketSaleTaskProcessVo> getProcess(@PathVariable Long taskId) {
+        return R.ok(ticketOpsService.selectSaleTaskProcess(taskId));
+    }
+
+    @SaCheckPermission("ticket:saleTask:query")
+    @GetMapping("/{taskId}/process-executions")
+    public TableDataInfo<org.dromara.ticket.domain.vo.TicketOrderExecutionVo> getProcessExecutions(
+        @PathVariable Long taskId,
+        @RequestParam(required = false) String status,
+        @RequestParam(required = false) Long scheduleId,
+        PageQuery pageQuery
+    ) {
+        return ticketOpsService.selectSaleTaskProcessExecutions(taskId, status, scheduleId, pageQuery);
+    }
+
     @SaCheckPermission("ticket:saleTask:add")
-    @Log(title = "商品抢购任务", businessType = BusinessType.INSERT)
+    @Log(title = "任务管理", businessType = BusinessType.INSERT)
     @RepeatSubmit
     @PostMapping
     public R<Void> add(@RequestBody TicketSaleTaskBo bo) {
@@ -44,25 +62,49 @@ public class TicketSaleTaskController extends BaseController {
     }
 
     @SaCheckPermission("ticket:saleTask:edit")
-    @Log(title = "商品抢购任务", businessType = BusinessType.UPDATE)
+    @Log(title = "任务管理", businessType = BusinessType.UPDATE)
     @RepeatSubmit
     @PutMapping
     public R<Void> edit(@RequestBody TicketSaleTaskBo bo) {
         return toAjax(ticketOpsService.updateSaleTask(bo));
     }
 
+    @SaCheckPermission("ticket:saleTask:edit")
+    @Log(title = "任务管理", businessType = BusinessType.UPDATE)
+    @RepeatSubmit
+    @PostMapping("/{taskId}/cancel")
+    public R<Void> cancel(@PathVariable Long taskId) {
+        return toAjax(ticketOpsService.cancelSaleTask(taskId));
+    }
+
     @SaCheckPermission("ticket:saleTask:remove")
-    @Log(title = "商品抢购任务", businessType = BusinessType.DELETE)
+    @Log(title = "任务管理", businessType = BusinessType.DELETE)
     @DeleteMapping("/{taskIds}")
     public R<Void> remove(@PathVariable Long[] taskIds) {
         return toAjax(ticketOpsService.removeSaleTasks(taskIds));
     }
 
     @SaCheckPermission("ticket:saleTask:execute")
-    @Log(title = "商品抢购任务", businessType = BusinessType.OTHER)
+    @Log(title = "任务管理", businessType = BusinessType.OTHER)
     @RepeatSubmit
     @PostMapping("/{taskId}/execute")
     public R<Long> execute(@PathVariable Long taskId) {
         return ticketOpsService.executeSaleTask(taskId);
+    }
+
+    @SaCheckPermission("ticket:saleTask:execute")
+    @Log(title = "任务管理", businessType = BusinessType.OTHER)
+    @RepeatSubmit
+    @PostMapping("/{taskId}/execute-now")
+    public R<Long> executeNow(@PathVariable Long taskId) {
+        return ticketOpsService.executeSaleTaskNow(taskId);
+    }
+
+    @SaCheckPermission("ticket:saleTask:execute")
+    @Log(title = "任务管理", businessType = BusinessType.OTHER)
+    @RepeatSubmit
+    @PostMapping("/{taskId}/retry-failed-lottery")
+    public R<Long> retryFailedLottery(@PathVariable Long taskId) {
+        return ticketOpsService.retryFailedLotteryExecutions(taskId);
     }
 }
