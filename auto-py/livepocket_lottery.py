@@ -247,9 +247,9 @@ def extract_input_value(page_text: str, input_name: str) -> Optional[str]:
     return html.unescape(match.group(1)) if match else None
 
 
-def extract_hidden_inputs(page_text: str) -> Dict[str, str]:
+def extract_hidden_inputs(page_text: str) -> Dict[str, Any]:
     """提取页面里已有 hidden input 和已勾选 checkbox。"""
-    values: Dict[str, str] = {}
+    values: Dict[str, Any] = {}
     for match in re.finditer(r"<input\b[^>]*>", page_text, flags=re.IGNORECASE | re.DOTALL):
         tag = match.group(0)
         input_type_match = re.search(r'\btype=["\']([^"\']+)["\']', tag, flags=re.IGNORECASE)
@@ -1456,6 +1456,374 @@ def select_has_option(page_text: str, select_name: str, option_value: str) -> bo
     return False
 
 
+QUESTIONNAIRE_ALLOWED_INPUT_TYPES = {"", "text", "search", "email", "tel", "url", "number"}
+QUESTIONNAIRE_SUPPORTED_TYPES = {"text", "textarea", "radio", "checkbox", "select"}
+
+
+class QuestionnaireValidationError(ValueError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        missing_fields: Optional[List[Dict[str, Any]]] = None,
+        invalid_fields: Optional[List[Dict[str, Any]]] = None,
+        questionnaire_config: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(message)
+        self.missing_fields = missing_fields or []
+        self.invalid_fields = invalid_fields or []
+        self.questionnaire_config = questionnaire_config or {}
+
+
+def has_boolean_attr(tag: str, attr_name: str) -> bool:
+    return bool(re.search(rf"\b{re.escape(attr_name)}(?:\b|=)", tag or "", flags=re.IGNORECASE))
+
+
+def clean_question_label(value: str) -> str:
+    text = compact_text(value or "", 240)
+    text = text.replace("必須", " ").replace("※", " ")
+    text = re.sub(r"\s+", " ", text)
+    return text.strip(" :-")
+
+
+def extract_question_label(page_text: str, start: int, end: int, fallback_name: str) -> str:
+    source = page_text or ""
+    container_tags = ["tr", "li", "fieldset", "section", "div", "p"]
+    for container_tag in container_tags:
+        open_index = source.rfind(f"<{container_tag}", 0, start)
+        close_index = source.find(f"</{container_tag}>", end)
+        if open_index < 0 or close_index < end:
+            continue
+        block_html = source[open_index: close_index + len(container_tag) + 3]
+        if len(block_html) > 2600:
+            continue
+        for title_tag in ("th", "dt", "legend", "h1", "h2", "h3", "h4", "h5", "h6", "label"):
+            match = re.search(
+                rf"<{title_tag}\b[^>]*>(.*?)</{title_tag}>",
+                block_html,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+            if match:
+                label = clean_question_label(visible_text(match.group(1)))
+                if label:
+                    return label
+    previous_html = source[max(0, start - 500):start]
+    candidates = re.findall(
+        r"<(?:label|th|dt|legend)\b[^>]*>(.*?)</(?:label|th|dt|legend)>",
+        previous_html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    for item in reversed(candidates):
+        label = clean_question_label(visible_text(item))
+        if label:
+            return label
+    return fallback_name
+
+
+def extract_choice_label(page_text: str, start: int, end: int, fallback_value: str) -> str:
+    source = page_text or ""
+    label_start = source.rfind("<label", 0, start)
+    label_end = source.find("</label>", end)
+    if label_start >= 0 and label_end >= end:
+        label_html = source[label_start: label_end + len("</label>")]
+        label = clean_question_label(visible_text(label_html))
+        if label:
+            return label
+    snippet = source[start: min(len(source), end + 220)]
+    label = clean_question_label(visible_text(snippet))
+    return label or fallback_value
+
+
+def extract_select_options(select_body: str) -> List[Dict[str, Any]]:
+    options: List[Dict[str, Any]] = []
+    for option_match in re.finditer(r"<option\b[^>]*>(.*?)</option>", select_body or "", flags=re.IGNORECASE | re.DOTALL):
+        option_tag = option_match.group(0)
+        attrs = parse_attrs(option_tag)
+        options.append(
+            {
+                "value": str(attrs.get("value", "")),
+                "label": clean_question_label(visible_text(option_match.group(1))) or str(attrs.get("value", "")),
+            }
+        )
+    return options
+
+
+def normalize_questionnaire_questions_for_signature(questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
+    for question in questions:
+        normalized.append(
+            {
+                "name": str(question.get("name") or ""),
+                "label": clean_question_label(str(question.get("label") or "")),
+                "type": str(question.get("type") or ""),
+                "required": bool(question.get("required")),
+                "options": [
+                    {
+                        "value": str(option.get("value") or ""),
+                        "label": clean_question_label(str(option.get("label") or "")),
+                    }
+                    for option in (question.get("options") or [])
+                    if isinstance(option, dict)
+                ],
+            }
+        )
+    normalized.sort(key=lambda item: item.get("name") or "")
+    return normalized
+
+
+def serialize_questionnaire_questions(questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "name": str(question.get("name") or ""),
+            "label": clean_question_label(str(question.get("label") or "")),
+            "type": str(question.get("type") or ""),
+            "required": bool(question.get("required")),
+            "options": [
+                {
+                    "value": str(option.get("value") or ""),
+                    "label": clean_question_label(str(option.get("label") or "")),
+                }
+                for option in (question.get("options") or [])
+                if isinstance(option, dict)
+            ],
+        }
+        for question in questions
+    ]
+
+
+def build_questionnaire_schema_signature(questions: List[Dict[str, Any]]) -> str:
+    normalized = normalize_questionnaire_questions_for_signature(questions)
+    digest = hashlib.sha256(json.dumps(normalized, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+    return f"sha256:{digest}"
+
+
+def extract_questionnaire_questions(confirm_text: str) -> List[Dict[str, Any]]:
+    source = confirm_text or ""
+    questions: List[Dict[str, Any]] = []
+    seen_names: set[str] = set()
+
+    grouped_choices: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for match in re.finditer(r"<input\b[^>]*>", source, flags=re.IGNORECASE | re.DOTALL):
+        tag = match.group(0)
+        attrs = parse_attrs(tag)
+        input_type = attrs.get("type", "").lower()
+        name = attrs.get("name", "")
+        if not name.startswith("questionnaire_answers[") or input_type not in {"radio", "checkbox"}:
+            continue
+        group_key = (name, input_type)
+        group = grouped_choices.get(group_key)
+        if group is None:
+            group = {
+                "name": name,
+                "type": input_type,
+                "label": extract_question_label(source, match.start(), match.end(), name),
+                "required": has_boolean_attr(tag, "required") or "必須" in extract_question_label(source, match.start(), match.end(), name),
+                "options": [],
+            }
+            grouped_choices[group_key] = group
+        option_value = str(attrs.get("value", ""))
+        if not any(option.get("value") == option_value for option in group["options"]):
+            group["options"].append(
+                {
+                    "value": option_value,
+                    "label": extract_choice_label(source, match.start(), match.end(), option_value),
+                }
+            )
+
+    for match in re.finditer(r"<textarea\b[^>]*>(.*?)</textarea>", source, flags=re.IGNORECASE | re.DOTALL):
+        tag = match.group(0)
+        attrs = parse_attrs(tag)
+        name = attrs.get("name", "")
+        if not name.startswith("questionnaire_answers[") or name in seen_names:
+            continue
+        seen_names.add(name)
+        questions.append(
+            {
+                "name": name,
+                "type": "textarea",
+                "label": extract_question_label(source, match.start(), match.end(), name),
+                "required": has_boolean_attr(tag, "required") or "必須" in extract_question_label(source, match.start(), match.end(), name),
+                "options": [],
+            }
+        )
+
+    for match in re.finditer(r"<select\b[^>]*>(.*?)</select>", source, flags=re.IGNORECASE | re.DOTALL):
+        tag = match.group(0)
+        attrs = parse_attrs(tag)
+        name = attrs.get("name", "")
+        if not name.startswith("questionnaire_answers[") or name in seen_names:
+            continue
+        seen_names.add(name)
+        questions.append(
+            {
+                "name": name,
+                "type": "select",
+                "label": extract_question_label(source, match.start(), match.end(), name),
+                "required": has_boolean_attr(tag, "required") or "必須" in extract_question_label(source, match.start(), match.end(), name),
+                "options": extract_select_options(match.group(1)),
+            }
+        )
+
+    for match in re.finditer(r"<input\b[^>]*>", source, flags=re.IGNORECASE | re.DOTALL):
+        tag = match.group(0)
+        attrs = parse_attrs(tag)
+        name = attrs.get("name", "")
+        input_type = attrs.get("type", "").lower()
+        if not name.startswith("questionnaire_answers[") or input_type not in QUESTIONNAIRE_ALLOWED_INPUT_TYPES or name in seen_names:
+            continue
+        seen_names.add(name)
+        questions.append(
+            {
+                "name": name,
+                "type": "text",
+                "label": extract_question_label(source, match.start(), match.end(), name),
+                "required": has_boolean_attr(tag, "required") or "必須" in extract_question_label(source, match.start(), match.end(), name),
+                "options": [],
+            }
+        )
+
+    questions.extend(grouped_choices.values())
+    questions = [
+        question
+        for question in questions
+        if question.get("name") and question.get("type") in QUESTIONNAIRE_SUPPORTED_TYPES
+    ]
+    questions.sort(key=lambda item: str(item.get("name") or ""))
+    return questions
+
+
+def build_questionnaire_preview_config(
+    questions: List[Dict[str, Any]],
+    *,
+    preview_account_id: Any = None,
+    preview_session_id: Any = None,
+    preview_at: Optional[str] = None,
+) -> Dict[str, Any]:
+    return {
+        "enabled": True,
+        "mode": "strict",
+        "previewAccountId": preview_account_id,
+        "previewSessionId": preview_session_id,
+        "previewAt": preview_at or utc_now_text(),
+        "schemaSignature": build_questionnaire_schema_signature(questions),
+        "questions": serialize_questionnaire_questions(questions),
+        "answers": {},
+    }
+
+
+def extract_questionnaire_config(task_options: Dict[str, Any]) -> Dict[str, Any]:
+    config = task_options.get("questionnaireConfig")
+    return config if isinstance(config, dict) else {}
+
+
+def apply_configured_questionnaire_answers(
+    form_data: Dict[str, Any],
+    questions: List[Dict[str, Any]],
+    questionnaire_config: Dict[str, Any],
+) -> Dict[str, Any]:
+    answers = questionnaire_config.get("answers")
+    if not isinstance(answers, dict):
+        answers = {}
+    missing_fields: List[Dict[str, Any]] = []
+    invalid_fields: List[Dict[str, Any]] = []
+
+    for question in questions:
+        name = str(question.get("name") or "")
+        question_type = str(question.get("type") or "")
+        required = bool(question.get("required"))
+        configured = name in answers
+        raw_answer = answers.get(name)
+        allowed_values = {str(option.get("value") or "") for option in (question.get("options") or []) if isinstance(option, dict)}
+
+        if question_type == "checkbox":
+            if not configured:
+                missing_fields.append(question)
+                continue
+            if isinstance(raw_answer, list):
+                normalized_values = [str(item).strip() for item in raw_answer if str(item).strip()]
+            elif raw_answer is None or raw_answer == "":
+                normalized_values = []
+            else:
+                normalized_values = [str(raw_answer).strip()]
+            if required and not normalized_values:
+                missing_fields.append(question)
+                continue
+            invalid_values = [item for item in normalized_values if allowed_values and item not in allowed_values]
+            if invalid_values:
+                invalid_fields.append(
+                    {
+                        "name": name,
+                        "label": question.get("label"),
+                        "type": question_type,
+                        "invalidValues": invalid_values,
+                    }
+                )
+                continue
+            if normalized_values:
+                form_data[name] = normalized_values
+            continue
+
+        if not configured:
+            missing_fields.append(question)
+            continue
+        answer_text = "" if raw_answer is None else str(raw_answer).strip()
+        if required and not answer_text:
+            missing_fields.append(question)
+            continue
+        if question_type in {"radio", "select"} and answer_text and allowed_values and answer_text not in allowed_values:
+            invalid_fields.append(
+                {
+                    "name": name,
+                    "label": question.get("label"),
+                    "type": question_type,
+                    "invalidValues": [answer_text],
+                }
+            )
+            continue
+        if answer_text or required or question_type in {"text", "textarea"}:
+            form_data[name] = answer_text
+
+    if missing_fields or invalid_fields:
+        raise QuestionnaireValidationError(
+            "问卷答案配置不完整，请先重新读取并填写确认页问卷",
+            missing_fields=missing_fields,
+            invalid_fields=invalid_fields,
+            questionnaire_config=build_questionnaire_preview_config(questions),
+        )
+
+    return {
+        "questionnaireAnswers": len(questions),
+        "questionnaireTextAnswers": sum(1 for item in questions if item.get("type") in {"text", "textarea"}),
+    }
+
+
+def validate_questionnaire_config_or_raise(
+    questionnaire_config: Dict[str, Any],
+    questions: List[Dict[str, Any]],
+) -> None:
+    current_config = build_questionnaire_preview_config(questions)
+    if not questions:
+        return
+    if not questionnaire_config or not is_truthy(questionnaire_config.get("enabled")):
+        raise QuestionnaireValidationError(
+            "确认页存在自定义问答，请先读取问卷并填写答案",
+            missing_fields=questions,
+            questionnaire_config=current_config,
+        )
+    current_signature = current_config.get("schemaSignature")
+    configured_signature = str(questionnaire_config.get("schemaSignature") or "").strip()
+    if not configured_signature:
+        raise QuestionnaireValidationError(
+            "问卷配置缺少签名，请重新读取确认页问卷",
+            questionnaire_config=current_config,
+        )
+    if configured_signature and configured_signature != current_signature:
+        raise QuestionnaireValidationError(
+            "问卷已变化，请重新读取确认页问卷",
+            questionnaire_config=current_config,
+        )
+
+
 def apply_text_questionnaire_answers(form_data: Dict[str, str], confirm_text: str, default_answer: str = "ない") -> int:
     applied = 0
     allowed_input_types = {"", "text", "search", "email", "tel", "url", "number"}
@@ -1536,7 +1904,9 @@ def build_lottery_purchase_form(
     event_id: str,
     reserve_id: str,
     purchase_type: str = "lottery",
-) -> Tuple[Dict[str, str], Dict[str, Any]]:
+    questionnaire_config: Optional[Dict[str, Any]] = None,
+    questionnaire_questions: Optional[List[Dict[str, Any]]] = None,
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     form_data = extract_hidden_inputs(confirm_text)
     authenticity_token = extract_input_value(confirm_text, "authenticity_token")
     if not authenticity_token:
@@ -1560,8 +1930,14 @@ def build_lottery_purchase_form(
         form_data["order_form[payment_method]"] = form_data.get("order_form[payment_method]") or "free"
         payment_status = "not_required"
 
-    questionnaire_count = apply_adult_questionnaire_answers(form_data, confirm_text)
-    questionnaire_text_count = apply_text_questionnaire_answers(form_data, confirm_text)
+    questionnaire_questions = questionnaire_questions or extract_questionnaire_questions(confirm_text)
+    questionnaire_context = {"questionnaireAnswers": 0, "questionnaireTextAnswers": 0}
+    if questionnaire_questions:
+        questionnaire_context = apply_configured_questionnaire_answers(
+            form_data,
+            questionnaire_questions,
+            questionnaire_config or {},
+        )
     form_data["order_form[follow_notification]"] = form_data.get("order_form[follow_notification]") or "1"
     form_data["order_form[purchase_agreement_content]"] = form_data.get("order_form[purchase_agreement_content]") or "1"
     payment_method = form_data.get("order_form[payment_method]", "free")
@@ -1570,8 +1946,8 @@ def build_lottery_purchase_form(
         "cvsType": form_data.get("order_form[sbps_web_cvs_type]", "") if payment_method == "cvs" else "",
         "paymentStatus": payment_status if payment_method != "free" else "not_required",
         "paymentRequiredOnSelected": payment_method != "free",
-        "questionnaireAnswers": questionnaire_count,
-        "questionnaireTextAnswers": questionnaire_text_count,
+        "questionnaireAnswers": questionnaire_context.get("questionnaireAnswers", 0),
+        "questionnaireTextAnswers": questionnaire_context.get("questionnaireTextAnswers", 0),
     }
 
 class LivePocketLotteryExecutor:
@@ -1657,6 +2033,74 @@ class LivePocketLotteryExecutor:
             refreshed_login_context=refreshed_login_context,
             trace_id=trace_id,
             task_options=task_options,
+        )
+
+    def preview_questionnaire(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        trace_id = str(payload.get("accountId") or payload.get("executionId") or uuid.uuid4())[:36]
+        task_options = parse_json_maybe(payload.get("taskOptions"))
+        login_context = parse_json_maybe(payload.get("loginReqData"))
+        account_info = parse_json_maybe(payload.get("accountInfo"))
+        configured_url = task_options.get("eventUrl") or task_options.get("lotteryEntryUrl")
+        selected_session_id = payload.get("selectedSessionId") or payload.get("sessionId") or task_options.get("sessionId")
+        if selected_session_id and not payload.get("sessionId"):
+            payload["sessionId"] = selected_session_id
+        selected_session = next(
+            (
+                item
+                for item in (task_options.get("selectedSessions") or [])
+                if isinstance(item, dict) and str(item.get("sessionId") or "") == str(selected_session_id or "")
+            ),
+            {},
+        )
+        if selected_session and not payload.get("sessionLabel"):
+            payload["sessionLabel"] = selected_session.get("sessionLabel")
+        if selected_session and not payload.get("receptionId"):
+            payload["receptionId"] = selected_session.get("receptionId")
+        if selected_session and not payload.get("ticketId"):
+            payload["ticketId"] = selected_session.get("ticketId")
+        if selected_session and not payload.get("ticketField"):
+            payload["ticketField"] = selected_session.get("ticketField")
+        email = str(payload.get("email") or task_options.get("email") or "")
+        password = str(
+            payload.get("password")
+            or payload.get("platformPassword")
+            or account_info.get("platformPassword")
+            or account_info.get("password")
+            or ""
+        )
+        platform_code = str(payload.get("platformCode") or task_options.get("platformCode") or "livepocket")
+        backend_base_url = str(payload.get("backendBaseUrl") or task_options.get("backendBaseUrl") or "").strip()
+
+        log(
+            "[lottery-preview] START "
+            f"trace={trace_id}, account={email}, eventUrl={configured_url}, sessionId={selected_session_id or '-'}"
+        )
+        if not configured_url:
+            return self.fail("缺少 taskOptions.eventUrl")
+        if not selected_session_id:
+            return self.fail("缺少 selectedSessionId，无法读取确认页问卷")
+
+        session, auth_source, _login_state, auth_error = resolve_authenticated_session(
+            email=email,
+            password=password,
+            login_context=login_context,
+            login_func=lambda: login_livepocket_runtime(email, password, platform_code, trace_id, backend_base_url),
+            logger=log,
+            trace_id=trace_id,
+            flow_label="lottery-preview",
+            request_headers=request_headers,
+        )
+        if not session:
+            return self.fail(auth_error or "账号登录态不可用，且现场登录失败")
+        refreshed_login_context = export_session_login_context(session)
+        return self.execute_authenticated(
+            payload=payload,
+            session=session,
+            auth_source=auth_source,
+            refreshed_login_context=refreshed_login_context,
+            trace_id=trace_id,
+            task_options=task_options,
+            preview_only=True,
         )
 
     def execute_batch(self, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1770,6 +2214,7 @@ class LivePocketLotteryExecutor:
         refreshed_login_context: Dict[str, Any],
         trace_id: str,
         task_options: Optional[Dict[str, Any]] = None,
+        preview_only: bool = False,
     ) -> Dict[str, Any]:
         task_options = task_options or parse_json_maybe(payload.get("taskOptions"))
         configured_url = task_options.get("eventUrl") or task_options.get("lotteryEntryUrl")
@@ -1852,6 +2297,23 @@ class LivePocketLotteryExecutor:
                 "receptionTitle": selected_event_card.get("receptionTitle", ""),
                 "salesType": selected_event_card.get("salesType", ""),
             }
+            if preview_only:
+                return self.fail(
+                    f"该账号已申込，无法继续读取确认页问卷: {already_applied_message}",
+                    http_status=event_resp.status_code,
+                    raw_result=compact_text(visible_text(event_text), 1600),
+                    request_url=event_url,
+                    extra={
+                        "selectedSession": selected_session,
+                        "selectedReason": "alreadyApplied",
+                        "ticketField": selected_session.get("fieldName"),
+                        "ticketId": selected_session.get("ticketId"),
+                        "resultUrl": event_resp.url or event_url,
+                        "authSource": auth_source,
+                        "loginReqData": json.dumps(refreshed_login_context, ensure_ascii=False),
+                        "alreadyApplied": True,
+                    },
+                )
             message = f"LivePocket 受付已申込済み: {already_applied_message}"
             log(
                 "[lottery-entry] DONE "
@@ -2217,8 +2679,67 @@ class LivePocketLotteryExecutor:
                 extra={"selectedSession": selected_session, "reserveId": reserve_id},
             )
 
+        questionnaire_questions = extract_questionnaire_questions(confirm_text)
+        questionnaire_preview_config = build_questionnaire_preview_config(
+            questionnaire_questions,
+            preview_account_id=payload.get("accountId"),
+            preview_session_id=session_id or selected_session.get("sessionId"),
+        )
+        if preview_only:
+            preview_message = "确认页无自定义问答" if not questionnaire_questions else f"已读取确认页问卷，共 {len(questionnaire_questions)} 题"
+            log(
+                "[lottery-preview] DONE "
+                f"trace={trace_id}, questionCount={len(questionnaire_questions)}, reserveId={reserve_id}, "
+                f"confirmUrl={confirm_url}"
+            )
+            return {
+                "success": True,
+                "status": "previewed",
+                "message": preview_message,
+                "httpStatus": confirm_resp.status_code,
+                "requestUrl": tickets_url,
+                "submitUrl": "",
+                "confirmUrl": confirm_url,
+                "resultUrl": confirm_resp.url or confirm_url,
+                "eventId": event_id,
+                "reserveId": reserve_id,
+                "sessionId": session_id,
+                "sessionLabel": session_label,
+                "selectedSession": selected_session,
+                "selectedReason": selected_reason,
+                "questionnaireConfig": questionnaire_preview_config,
+                "questionCount": len(questionnaire_questions),
+                "authSource": auth_source,
+                "loginReqData": json.dumps(refreshed_login_context, ensure_ascii=False),
+                "rawResult": compact_text(visible_text(confirm_text), 1600),
+            }
+
+        questionnaire_config = extract_questionnaire_config(task_options)
         try:
-            purchase_form, payment_context = build_lottery_purchase_form(confirm_text, event_id, reserve_id, purchase_type)
+            validate_questionnaire_config_or_raise(questionnaire_config, questionnaire_questions)
+            purchase_form, payment_context = build_lottery_purchase_form(
+                confirm_text,
+                event_id,
+                reserve_id,
+                purchase_type,
+                questionnaire_config=questionnaire_config,
+                questionnaire_questions=questionnaire_questions,
+            )
+        except QuestionnaireValidationError as exc:
+            return self.fail(
+                str(exc),
+                http_status=confirm_resp.status_code,
+                raw_result=compact_text(visible_text(confirm_text)),
+                request_url=confirm_url,
+                extra={
+                    "selectedSession": selected_session,
+                    "reserveId": reserve_id,
+                    "confirmUrl": confirm_url,
+                    "questionnaireConfig": exc.questionnaire_config or questionnaire_preview_config,
+                    "missingQuestionnaires": exc.missing_fields,
+                    "invalidQuestionnaires": exc.invalid_fields,
+                },
+            )
         except ValueError as exc:
             return self.fail(
                 str(exc),
@@ -2868,6 +3389,9 @@ class LotteryRequestHandler(BaseHTTPRequestHandler):
         if request_path == "/livepocket/lottery-entry":
             self.handle_lottery_entry()
             return
+        if request_path == "/livepocket/questionnaire-preview":
+            self.handle_questionnaire_preview()
+            return
         if request_path == "/livepocket/lottery-batch-entry":
             self.handle_lottery_batch_entry()
             return
@@ -2923,6 +3447,21 @@ class LotteryRequestHandler(BaseHTTPRequestHandler):
             self.send_json(result)
         except Exception as exc:
             log(f"[livepocket.lottery] POST /livepocket/lottery-entry exception: {exc}")
+            self.send_json({"success": False, "status": "failed", "message": f"执行异常：{exc}"}, status=500)
+
+    def handle_questionnaire_preview(self):
+        try:
+            payload = self.read_json_body()
+            result = self.executor.preview_questionnaire(payload)
+            log(
+                "[livepocket.preview] POST /livepocket/questionnaire-preview result "
+                f"accountId={payload.get('accountId')}, success={result.get('success')}, status={result.get('status')}, "
+                f"sessionId={payload.get('selectedSessionId') or payload.get('sessionId')}, questionCount={result.get('questionCount') or 0}, "
+                f"message={result.get('message')}"
+            )
+            self.send_json(result, status=200 if result.get("success") else 500)
+        except Exception as exc:
+            log(f"[livepocket.preview] POST /livepocket/questionnaire-preview exception: {exc}")
             self.send_json({"success": False, "status": "failed", "message": f"执行异常：{exc}"}, status=500)
 
     def handle_lottery_batch_entry(self):
@@ -3150,6 +3689,7 @@ def start_http_server(host: str, port: int) -> ThreadingHTTPServer:
     server = ThreadingHTTPServer((host, port), LotteryRequestHandler)
     log(f"Ticket HTTP service listening on {host}:{port}")
     log("Endpoint: POST /livepocket/lottery-entry")
+    log("Endpoint: POST /livepocket/questionnaire-preview")
     log("Endpoint: POST /livepocket/lottery-batch-entry")
     log("Endpoint: POST /livepocket/profile-last-name")
     log("Endpoint: POST /livepocket/login-keepalive")

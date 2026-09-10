@@ -92,15 +92,14 @@ public class LivePocketAdapter implements TicketPlatformAdapter {
             template.put("lotterySubmitUrl", "");
             template.put("entryQuantity", 1);
             template.put("notificationPreference", "email");
-            template.put("formFields", new LinkedHashMap<>());
             template.put("successKeywords", List.of("申込", "応募", "完了"));
             template.put("failureKeywords", List.of("エラー", "失敗", "入力してください"));
-            template.put("notes", "抽票由 Python 执行器使用账号登录上下文提交");
+            template.put("notes", "抽票由 Python 执行器使用账号登录上下文提交；确认页问卷请在任务页读取后配置");
             return TicketOrderFlowSupport.buildTemplate(
                 platform,
                 purchaseType,
                 template,
-                List.of("lotteryEntryUrl", "lotterySubmitUrl", "entryQuantity", "notificationPreference", "formFields", "successKeywords", "failureKeywords", "notes")
+                List.of("lotteryEntryUrl", "lotterySubmitUrl", "entryQuantity", "notificationPreference", "successKeywords", "failureKeywords", "notes")
             );
         }
 

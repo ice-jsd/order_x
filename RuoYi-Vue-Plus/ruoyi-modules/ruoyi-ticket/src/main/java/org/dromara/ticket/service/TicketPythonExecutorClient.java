@@ -8,6 +8,7 @@ import org.dromara.common.core.exception.ServiceException;
 import org.dromara.common.core.utils.StringUtils;
 import org.dromara.ticket.config.TicketPythonExecutorProperties;
 import org.dromara.ticket.domain.vo.TicketJumpShopProductInfoVo;
+import org.dromara.ticket.domain.vo.TicketLivePocketQuestionnairePreviewVo;
 import org.dromara.ticket.domain.vo.TicketLotteryEventInfoVo;
 import org.springframework.stereotype.Component;
 
@@ -77,6 +78,40 @@ public class TicketPythonExecutorClient {
         } catch (Exception ex) {
             log.error("fetch livepocket lottery event info failed, eventUrl={}", eventUrl, ex);
             throw new ServiceException("Python 抽票页面解析异常: " + ex.getMessage());
+        }
+    }
+
+    public TicketLivePocketQuestionnairePreviewVo previewLivePocketQuestionnaire(Map<String, Object> payload) {
+        if (!properties.isEnabled()) {
+            throw new ServiceException("Python 抽票执行器未启用");
+        }
+        if (StringUtils.isBlank(properties.getBaseUrl())) {
+            throw new ServiceException("未配置 Python 抽票执行器地址");
+        }
+        try {
+            String body = objectMapper.writeValueAsString(payload);
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(properties.getBaseUrl() + "/livepocket/questionnaire-preview"))
+                .timeout(Duration.ofMillis(properties.getTimeoutMs()))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            Map<String, Object> result = objectMapper.readValue(response.body(), new TypeReference<>() {
+            });
+            if (response.statusCode() < 200 || response.statusCode() >= 300 || !Boolean.TRUE.equals(result.get("success"))) {
+                String message = StringUtils.defaultString(String.valueOf(result.get("message")), "未知错误");
+                throw new ServiceException("Python 读取 LivePocket 确认页问卷失败: " + message);
+            }
+            return objectMapper.convertValue(result.get("questionnaireConfig") == null ? result.get("data") : result, TicketLivePocketQuestionnairePreviewVo.class);
+        } catch (ServiceException ex) {
+            throw ex;
+        } catch (HttpTimeoutException ex) {
+            log.warn("preview livepocket questionnaire timeout, payload={}", payload, ex);
+            throw new ServiceException("Python 读取 LivePocket 确认页问卷超时");
+        } catch (Exception ex) {
+            log.error("preview livepocket questionnaire failed, payload={}", payload, ex);
+            throw new ServiceException("Python 读取 LivePocket 确认页问卷异常: " + ex.getMessage());
         }
     }
 

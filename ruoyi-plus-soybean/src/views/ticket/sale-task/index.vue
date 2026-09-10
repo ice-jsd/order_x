@@ -27,6 +27,7 @@ import {
   fetchGetTicketSaleTaskProcessExecutions,
   fetchGetTicketSaleTaskList,
   fetchParseTicketLotteryEvent,
+  fetchPreviewLivePocketQuestionnaire,
   fetchRetryFailedTicketLotteryTask,
   fetchUpdateTicketSaleTask
 } from '@/service/api/ticket';
@@ -139,6 +140,12 @@ const selectedLotteryCollectionEventUrl = ref<string | null>(null);
 const lotteryCollectionSourceUrl = ref<string | null>(null);
 const selectedLotteryReceptionKey = ref<string | null>(null);
 const lotteryCollectionResolving = ref(false);
+const questionnairePreviewLoading = ref(false);
+const questionnairePreviewAccountId = ref<CommonType.IdType | null>(null);
+const questionnairePreviewSessionId = ref<string | null>(null);
+const questionnairePreviewConfig = ref<Api.Ticket.LivePocketQuestionnaireConfig | null>(null);
+const questionnairePreviewResult = ref<Api.Ticket.LivePocketQuestionnairePreviewResult | null>(null);
+const questionnaireInvalidationReason = ref('');
 const accountSearchKeyword = ref('');
 const lastLoadedTemplateText = ref('{\\n  \\n}');
 const pauseSelectionWatcher = ref(false);
@@ -277,6 +284,9 @@ const accountLoadedCountText = computed(() =>
     : String(accountTableData.value.length)
 );
 const isLotteryTask = computed(() => formModel.value.purchaseType === 'lottery');
+const isLivePocketLotteryTask = computed(
+  () => isLotteryTask.value && normalizePlatformRoutingCode(selectedPlatform.value) === 'livepocket'
+);
 const guidedTaskLabel = computed(() => (isLotteryTask.value ? '抽票' : isJumpShopTask.value ? '下单' : '抢票'));
 const guidedSessionLabel = computed(() => (isLotteryTask.value ? '场次' : isJumpShopTask.value ? '资料' : '票种'));
 const usesGuidedTaskFlow = computed(
@@ -518,6 +528,7 @@ function syncLotteryReceptionSelection() {
     selectedLotteryReceptionKey.value = null;
     formModel.value.selectedSessions = [];
     formModel.value.lotterySchedules = [];
+    invalidateQuestionnairePreview('已更改活动受付，请重新读取问卷');
     return;
   }
   const exists = groups.some(item => item.key === selectedLotteryReceptionKey.value);
@@ -527,10 +538,12 @@ function syncLotteryReceptionSelection() {
   selectedLotteryReceptionKey.value = groups.length === 1 ? groups[0].key : null;
   formModel.value.selectedSessions = [];
   formModel.value.lotterySchedules = [];
+  invalidateQuestionnairePreview('已更改活动受付，请重新读取问卷');
   if (isLivePocketFlashSaleTask.value && groups.length === 1 && groups[0].sessions.length === 1) {
     formModel.value.selectedSessions = [groups[0].sessions[0]];
     applyFlashSaleSelectionDefaults(groups[0].sessions[0]);
   }
+  syncQuestionnairePreviewSelections();
 }
 
 function formatLotterySessionOptionLabel(item?: Api.Ticket.LotteryEventSession | null) {
@@ -595,6 +608,7 @@ const checkedLotterySessionRowKeys = computed<string[]>({
     return (formModel.value.selectedSessions || []).map(item => item.sessionId);
   },
   set(value) {
+    const previousSessionIds = (formModel.value.selectedSessions || []).map(item => item.sessionId);
     const allSessions = currentLotteryReceptionSessions.value;
     const nextValue = isLivePocketFlashSaleTask.value && value.length > 1 ? value.slice(-1) : value;
     formModel.value.selectedSessions = allSessions.filter(item => nextValue.includes(item.sessionId));
@@ -613,17 +627,42 @@ const checkedLotterySessionRowKeys = computed<string[]>({
         sessionLabel: firstSession?.sessionLabel
       };
     });
+    if (previousSessionIds.join(',') !== nextValue.join(',')) {
+      invalidateQuestionnairePreview('已更改参与场次，请重新读取问卷', false);
+    }
+    syncQuestionnairePreviewSelections();
   }
 });
 const selectedAccountPreview = computed(() =>
   accountTableData.value.filter(item => formModel.value.accountIds?.includes(item.accountId)).slice(0, 3)
 );
+const questionnairePreviewAccountOptions = computed(() =>
+  accountTableData.value
+    .filter(item => formModel.value.accountIds?.includes(item.accountId))
+    .map(item => ({
+      label: item.email || `账号 ${item.accountId}`,
+      value: item.accountId
+    }))
+);
+const questionnairePreviewSessionOptions = computed(() =>
+  (formModel.value.selectedSessions || []).map(item => ({
+    label: item.sessionLabel || item.sessionId || '-',
+    value: String(item.sessionId || '')
+  }))
+);
+const hasQuestionnairePreviewConfig = computed(() => Boolean(questionnairePreviewConfig.value?.questions?.length));
 const checkedAccountRowKeys = computed<CommonType.IdType[]>({
   get() {
     return formModel.value.accountIds || [];
   },
   set(value) {
+    const previewAccountChanged =
+      questionnairePreviewAccountId.value !== null && !value.includes(questionnairePreviewAccountId.value);
     formModel.value.accountIds = value;
+    if (previewAccountChanged) {
+      invalidateQuestionnairePreview('预读账号已变更，请重新读取问卷', false);
+    }
+    syncQuestionnairePreviewSelections();
   }
 });
 
@@ -672,6 +711,7 @@ async function handleSelectAllAccounts() {
     }
     formModel.value.accountIds = Array.from(nextIds);
     accountOptionsTotal.value = Number(result.totalCount || accountOptionsTotal.value || 0);
+    syncQuestionnairePreviewSelections();
   } finally {
     accountOptionsLoading.value = false;
   }
@@ -679,6 +719,8 @@ async function handleSelectAllAccounts() {
 
 function handleClearSelectedAccounts() {
   formModel.value.accountIds = [];
+  invalidateQuestionnairePreview('预读账号已变更，请重新读取问卷', false);
+  syncQuestionnairePreviewSelections();
 }
 
 function renderOperateIconButton(label: string, icon: Component, type: NaiveUI.ThemeColor, onClick?: () => void) {
@@ -848,6 +890,7 @@ function handleSelectLotteryReception(receptionKey: string) {
   selectedLotteryReceptionKey.value = receptionKey;
   formModel.value.selectedSessions = [];
   formModel.value.lotterySchedules = [];
+  invalidateQuestionnairePreview('已切换受付，请重新读取问卷', false);
   if (isLivePocketFlashSaleTask.value) {
     const matchedGroup = lotteryReceptionGroups.value.find(item => item.key === receptionKey);
     if (matchedGroup?.sessions?.length === 1) {
@@ -855,6 +898,7 @@ function handleSelectLotteryReception(receptionKey: string) {
       applyFlashSaleSelectionDefaults(matchedGroup.sessions[0]);
     }
   }
+  syncQuestionnairePreviewSelections();
 }
 
 const { columns, columnChecks, data, getData, getDataByPage, loading, mobilePagination, scrollX } =
@@ -985,6 +1029,7 @@ watch(
     lotteryCollectionSourceUrl.value = preservedLotteryCollectionUrl;
     selectedLotteryReceptionKey.value = null;
     lotteryCollectionResolving.value = false;
+    clearQuestionnairePreviewState('', true);
     accountSearchKeyword.value = '';
     await loadAccountOptions(platformId);
 
@@ -1046,6 +1091,154 @@ function parseTaskJson(value?: string | null) {
 
 function formatTaskOptions(value: Record<string, unknown>) {
   return JSON.stringify(value, null, 2);
+}
+
+function deepClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function readQuestionnaireConfigFromTaskOptions(
+  options: Record<string, unknown> | null
+): Api.Ticket.LivePocketQuestionnaireConfig | null {
+  const config = options?.questionnaireConfig;
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    return null;
+  }
+  const raw = config as Record<string, unknown>;
+  return {
+    enabled: raw.enabled !== false,
+    mode: String(raw.mode || 'strict'),
+    previewAccountId: raw.previewAccountId as CommonType.IdType | undefined,
+    previewSessionId: raw.previewSessionId ? String(raw.previewSessionId) : undefined,
+    previewAt: raw.previewAt ? String(raw.previewAt) : undefined,
+    schemaSignature: raw.schemaSignature ? String(raw.schemaSignature) : undefined,
+    questions: Array.isArray(raw.questions) ? (deepClone(raw.questions) as Api.Ticket.LivePocketQuestionnaireQuestion[]) : [],
+    answers:
+      raw.answers && typeof raw.answers === 'object' && !Array.isArray(raw.answers)
+        ? (deepClone(raw.answers) as Record<string, string | string[]>)
+        : {}
+  };
+}
+
+function writeQuestionnaireConfigToTaskOptions(config: Api.Ticket.LivePocketQuestionnaireConfig | null) {
+  const options = parseTaskJson(formModel.value.taskOptions) || {};
+  if (config && config.questions?.length) {
+    options.questionnaireConfig = deepClone(config);
+  } else {
+    delete options.questionnaireConfig;
+  }
+  formModel.value.taskOptions = formatTaskOptions(options);
+}
+
+function syncQuestionnairePreviewSelections() {
+  const selectedAccountOptions = accountTableData.value
+    .filter(item => formModel.value.accountIds?.includes(item.accountId))
+    .map(item => item.accountId);
+  if (selectedAccountOptions.length) {
+    if (!selectedAccountOptions.includes(questionnairePreviewAccountId.value as CommonType.IdType)) {
+      questionnairePreviewAccountId.value = selectedAccountOptions[0];
+    }
+  } else {
+    questionnairePreviewAccountId.value = null;
+  }
+
+  const selectedSessionOptions = (formModel.value.selectedSessions || []).map(item => String(item.sessionId || ''));
+  if (selectedSessionOptions.length) {
+    if (!selectedSessionOptions.includes(String(questionnairePreviewSessionId.value || ''))) {
+      questionnairePreviewSessionId.value = selectedSessionOptions[0];
+    }
+  } else {
+    questionnairePreviewSessionId.value = null;
+  }
+}
+
+function clearQuestionnairePreviewState(reason = '', resetSelectors = false) {
+  questionnairePreviewConfig.value = null;
+  questionnairePreviewResult.value = null;
+  questionnaireInvalidationReason.value = reason;
+  if (resetSelectors) {
+    questionnairePreviewAccountId.value = null;
+    questionnairePreviewSessionId.value = null;
+  }
+}
+
+function syncQuestionnairePreviewStateFromTaskOptions(options?: Record<string, unknown> | null) {
+  const nextConfig = readQuestionnaireConfigFromTaskOptions(options ?? parseTaskJson(formModel.value.taskOptions));
+  questionnairePreviewConfig.value = nextConfig ? deepClone(nextConfig) : null;
+  questionnairePreviewResult.value = nextConfig
+    ? {
+        questionnaireConfig: deepClone(nextConfig),
+        questionCount: nextConfig.questions?.length || 0
+      }
+    : null;
+  questionnaireInvalidationReason.value = '';
+  if (nextConfig?.previewAccountId) {
+    questionnairePreviewAccountId.value = nextConfig.previewAccountId;
+  }
+  if (nextConfig?.previewSessionId) {
+    questionnairePreviewSessionId.value = nextConfig.previewSessionId;
+  }
+  syncQuestionnairePreviewSelections();
+}
+
+function invalidateQuestionnairePreview(reason: string, resetSelectors = false) {
+  const hadConfig = Boolean(questionnairePreviewConfig.value?.questions?.length);
+  writeQuestionnaireConfigToTaskOptions(null);
+  clearQuestionnairePreviewState(hadConfig ? reason : '', resetSelectors);
+  syncQuestionnairePreviewSelections();
+}
+
+function setQuestionnairePreviewConfig(
+  config: Api.Ticket.LivePocketQuestionnaireConfig | null,
+  result?: Api.Ticket.LivePocketQuestionnairePreviewResult | null
+) {
+  questionnairePreviewConfig.value = config ? deepClone(config) : null;
+  questionnairePreviewResult.value = result ? deepClone(result) : config ? { questionnaireConfig: deepClone(config) } : null;
+  questionnaireInvalidationReason.value = '';
+  writeQuestionnaireConfigToTaskOptions(questionnairePreviewConfig.value);
+  syncQuestionnairePreviewSelections();
+}
+
+function getQuestionnaireAnswer(questionName: string) {
+  return questionnairePreviewConfig.value?.answers?.[questionName];
+}
+
+function getQuestionnaireTextAnswer(questionName: string) {
+  const value = getQuestionnaireAnswer(questionName);
+  return Array.isArray(value) ? '' : String(value || '');
+}
+
+function getQuestionnaireMultiAnswer(questionName: string) {
+  const value = getQuestionnaireAnswer(questionName);
+  return Array.isArray(value) ? [...value] : [];
+}
+
+function updateQuestionnaireAnswer(questionName: string, value: string | string[]) {
+  if (!questionnairePreviewConfig.value) return;
+  questionnairePreviewConfig.value = {
+    ...questionnairePreviewConfig.value,
+    answers: {
+      ...(questionnairePreviewConfig.value.answers || {}),
+      [questionName]: Array.isArray(value) ? [...value] : value
+    }
+  };
+  writeQuestionnaireConfigToTaskOptions(questionnairePreviewConfig.value);
+}
+
+function buildQuestionnaireAnswerSeed(
+  questions: Api.Ticket.LivePocketQuestionnaireQuestion[],
+  previousAnswers?: Record<string, string | string[]>
+) {
+  const seed: Record<string, string | string[]> = {};
+  for (const question of questions || []) {
+    const previousValue = previousAnswers?.[question.name];
+    if (question.type === 'checkbox') {
+      seed[question.name] = Array.isArray(previousValue) ? [...previousValue] : [];
+      continue;
+    }
+    seed[question.name] = Array.isArray(previousValue) ? '' : String(previousValue || '');
+  }
+  return seed;
 }
 
 function isLivePocketTicketsUrl(value: unknown) {
@@ -1184,6 +1377,7 @@ function applyLotteryEventInfo(eventInfo: Api.Ticket.LotteryEventInfo, fromHisto
   formModel.value.lotteryEventUrl = eventInfo.eventUrl;
   formModel.value.selectedSessions = [];
   formModel.value.lotterySchedules = [];
+  invalidateQuestionnairePreview('活动已重新解析，请重新读取问卷', false);
   selectedLotteryHistoryUrl.value = fromHistory ? getLotteryHistoryValue(eventInfo) : null;
   syncLotteryReceptionSelection();
   if (!formModel.value.taskName && eventInfo.eventTitle) {
@@ -1215,6 +1409,7 @@ function applyLotteryEventInfo(eventInfo: Api.Ticket.LotteryEventInfo, fromHisto
   };
   formModel.value.taskOptions = formatTaskOptions(options);
   lastLoadedTemplateText.value = formModel.value.taskOptions;
+  syncQuestionnairePreviewSelections();
 }
 
 async function loadLotteryParseHistory(platformId?: CommonType.IdType | null) {
@@ -1235,6 +1430,7 @@ async function handleCompletedLotteryEventInfo(eventInfo: Api.Ticket.LotteryEven
     formModel.value.selectedSessions = [];
     formModel.value.lotterySchedules = [];
     selectedLotteryCollectionEventUrl.value = null;
+    invalidateQuestionnairePreview('活动已切换为集合页，请重新读取问卷', false);
     lotteryEventParsing.value = false;
     lotteryCollectionResolving.value = false;
     await loadLotteryParseHistory(formModel.value.platformId);
@@ -1281,6 +1477,7 @@ async function handleSelectLotteryParseHistory(historyValue: CommonType.IdType |
     formModel.value.selectedSessions = [];
     formModel.value.lotterySchedules = [];
     selectedLotteryCollectionEventUrl.value = null;
+    invalidateQuestionnairePreview('已载入新的活动集合，请重新读取问卷', false);
     window.$message?.success('已载入活动集合，请选择一个具体活动');
     return;
   }
@@ -1788,6 +1985,7 @@ async function loadAccountOptions(platformId?: CommonType.IdType | null) {
       const occupiedIds = new Set(rows.filter(item => item.lotteryLinkOccupied).map(item => item.accountId));
       formModel.value.accountIds = (formModel.value.accountIds || []).filter(accountId => !occupiedIds.has(accountId));
     }
+    syncQuestionnairePreviewSelections();
     return true;
   } finally {
     if (accountOptionsLoadSeq.value === loadSeq) {
@@ -2027,6 +2225,7 @@ async function handleSelectLotteryCollectionEvent(row: Api.Ticket.LotteryEventSe
   formModel.value.selectedSessions = [];
   formModel.value.lotterySchedules = [];
   formModel.value.lotteryEventUrl = row.eventUrl;
+  invalidateQuestionnairePreview('已切换具体活动，请重新读取问卷', false);
   lotteryEventInfo.value = null;
   lotteryStep.value = lotteryParseStepIndex.value;
   window.$message?.success(`已选择活动，请点击“解析${guidedSessionLabel.value}”继续`);
@@ -2083,6 +2282,93 @@ function autoAssignLotterySchedules() {
   window.$message?.success(`已按 ${formModel.value.lotterySchedules.length} 个场次自动分配 ${accountCount} 个账号`);
 }
 
+function handleQuestionnairePreviewAccountChange(value: CommonType.IdType | null) {
+  const previousValue = questionnairePreviewAccountId.value;
+  questionnairePreviewAccountId.value = value;
+  if (
+    questionnairePreviewConfig.value?.questions?.length &&
+    previousValue !== null &&
+    value !== null &&
+    String(previousValue) !== String(value)
+  ) {
+    invalidateQuestionnairePreview('预读账号已变更，请重新读取问卷', false);
+  }
+}
+
+function handleQuestionnairePreviewSessionChange(value: string | null) {
+  const previousValue = questionnairePreviewSessionId.value;
+  questionnairePreviewSessionId.value = value;
+  if (
+    questionnairePreviewConfig.value?.questions?.length &&
+    previousValue &&
+    value &&
+    String(previousValue) !== String(value)
+  ) {
+    invalidateQuestionnairePreview('预读场次已变更，请重新读取问卷', false);
+  }
+}
+
+async function handlePreviewLivePocketQuestionnaire() {
+  if (!isLivePocketLotteryTask.value) return;
+  if (!formModel.value.platformId) {
+    window.$message?.error('请先选择目标平台');
+    return;
+  }
+  if (!formModel.value.accountIds?.length) {
+    window.$message?.error('请先选择执行账号');
+    return;
+  }
+  if (!formModel.value.selectedSessions?.length) {
+    window.$message?.error('请先选择至少一个抽選场次');
+    return;
+  }
+  const previewAccountId = questionnairePreviewAccountId.value || questionnairePreviewAccountOptions.value[0]?.value;
+  const previewSessionId = questionnairePreviewSessionId.value || questionnairePreviewSessionOptions.value[0]?.value;
+  if (!previewAccountId) {
+    window.$message?.error('请选择一个预读账号');
+    return;
+  }
+  if (!previewSessionId) {
+    window.$message?.error('请选择一个预读场次');
+    return;
+  }
+
+  questionnairePreviewLoading.value = true;
+  try {
+    const { data: result, error } = await fetchPreviewLivePocketQuestionnaire({
+      platformId: formModel.value.platformId,
+      accountId: previewAccountId,
+      lotteryEventUrl: formModel.value.lotteryEventUrl || String(parseTaskJson(formModel.value.taskOptions)?.eventUrl || ''),
+      selectedSessionId: previewSessionId,
+      taskOptions: formModel.value.taskOptions || '{}'
+    });
+    if (error || !result) {
+      return;
+    }
+    const nextConfig = result.questionnaireConfig ? deepClone(result.questionnaireConfig) : null;
+    if (!nextConfig || !nextConfig.questions?.length) {
+      questionnairePreviewResult.value = result;
+      invalidateQuestionnairePreview('', false);
+      window.$message?.success('确认页没有自定义问答，无需额外配置');
+      return;
+    }
+    const previousConfig = questionnairePreviewConfig.value;
+    const previousAnswers =
+      previousConfig?.schemaSignature && previousConfig.schemaSignature === nextConfig.schemaSignature ? previousConfig.answers : undefined;
+    nextConfig.enabled = true;
+    nextConfig.mode = 'strict';
+    nextConfig.previewAccountId = previewAccountId;
+    nextConfig.previewSessionId = previewSessionId;
+    nextConfig.answers = buildQuestionnaireAnswerSeed(nextConfig.questions || [], previousAnswers);
+    questionnairePreviewAccountId.value = previewAccountId;
+    questionnairePreviewSessionId.value = previewSessionId;
+    setQuestionnairePreviewConfig(nextConfig, result);
+    window.$message?.success(`已读取确认页问卷，共 ${nextConfig.questions.length} 题`);
+  } finally {
+    questionnairePreviewLoading.value = false;
+  }
+}
+
 function resetOperateState(purchaseType: 'flash_sale' | 'lottery') {
   operateType.value = 'add';
   activeTaskMode.value = purchaseType;
@@ -2105,6 +2391,7 @@ function resetOperateState(purchaseType: 'flash_sale' | 'lottery') {
   lotteryCollectionSourceUrl.value = null;
   selectedLotteryReceptionKey.value = null;
   lotteryCollectionResolving.value = false;
+  clearQuestionnairePreviewState('', true);
   lotteryStep.value = 1;
 }
 
@@ -2208,6 +2495,7 @@ async function handleEdit(row: Api.Ticket.SaleTask) {
   lotteryCollectionSourceUrl.value = null;
   selectedLotteryReceptionKey.value = detailRow.selectedSessions?.[0] ? buildLotteryReceptionKey(detailRow.selectedSessions[0]) : null;
   lotteryCollectionResolving.value = false;
+  syncQuestionnairePreviewStateFromTaskOptions(taskOptions);
   lotteryStep.value = usesGuidedTaskFlow.value ? lotteryScheduleStepIndex.value : 1;
   if (usesGuidedTaskFlow.value) {
     await loadLotteryParseHistory(detailRow.platformId);
@@ -3725,6 +4013,119 @@ function handleSearch() {
 
           <div v-show="lotteryStep === lotteryScheduleStepIndex" class="lottery-wizard__panel">
             <div v-if="isLotteryTask" class="lottery-scheduler w-full">
+              <div v-if="isLivePocketLotteryTask" class="questionnaire-builder">
+                <div class="questionnaire-builder__header">
+                  <div>
+                    <div class="questionnaire-builder__title">确认页问卷</div>
+                    <div class="questionnaire-builder__hint">
+                      用 1 个已登录账号先走到 LivePocket 确认页，只读取真实问卷结构，不提交最终抽票。
+                    </div>
+                  </div>
+                  <NTag v-if="hasQuestionnairePreviewConfig" type="success" :bordered="false">
+                    已读取 {{ questionnairePreviewConfig?.questions?.length || 0 }} 题
+                  </NTag>
+                  <NTag v-else type="default" :bordered="false">未读取</NTag>
+                </div>
+
+                <div class="questionnaire-builder__toolbar">
+                  <NSelect
+                    :value="questionnairePreviewAccountId"
+                    :options="questionnairePreviewAccountOptions"
+                    placeholder="选择预读账号"
+                    class="questionnaire-builder__selector"
+                    @update:value="handleQuestionnairePreviewAccountChange"
+                  />
+                  <NSelect
+                    :value="questionnairePreviewSessionId"
+                    :options="questionnairePreviewSessionOptions"
+                    placeholder="选择预读场次"
+                    class="questionnaire-builder__selector"
+                    @update:value="handleQuestionnairePreviewSessionChange"
+                  />
+                  <NButton
+                    type="primary"
+                    ghost
+                    :loading="questionnairePreviewLoading"
+                    :disabled="!questionnairePreviewAccountOptions.length || !questionnairePreviewSessionOptions.length"
+                    @click="handlePreviewLivePocketQuestionnaire"
+                  >
+                    读取问卷
+                  </NButton>
+                </div>
+
+                <div v-if="(formModel.selectedSessions?.length || 0) > 1" class="questionnaire-builder__tips">
+                  多场次任务共用一套问卷答案；如果不同场次的确认页题目不同，执行时会严格失败并提示重新读取。
+                </div>
+                <div v-if="questionnaireInvalidationReason" class="questionnaire-builder__warning">
+                  {{ questionnaireInvalidationReason }}
+                </div>
+
+                <div v-if="hasQuestionnairePreviewConfig" class="questionnaire-builder__list">
+                  <div
+                    v-for="question in questionnairePreviewConfig?.questions || []"
+                    :key="question.name"
+                    class="questionnaire-builder__item"
+                  >
+                    <div class="questionnaire-builder__item-head">
+                      <div class="questionnaire-builder__item-title">{{ question.label || question.name }}</div>
+                      <div class="questionnaire-builder__item-meta">
+                        <NTag size="small" type="info" :bordered="false">{{ question.type }}</NTag>
+                        <NTag v-if="question.required" size="small" type="warning" :bordered="false">必填</NTag>
+                      </div>
+                    </div>
+
+                    <NInput
+                      v-if="question.type === 'text'"
+                      :value="getQuestionnaireTextAnswer(question.name)"
+                      placeholder="请输入答案"
+                      @update:value="value => updateQuestionnaireAnswer(question.name, value || '')"
+                    />
+                    <NInput
+                      v-else-if="question.type === 'textarea'"
+                      type="textarea"
+                      :value="getQuestionnaireTextAnswer(question.name)"
+                      :autosize="{ minRows: 2, maxRows: 5 }"
+                      placeholder="请输入答案"
+                      @update:value="value => updateQuestionnaireAnswer(question.name, value || '')"
+                    />
+                    <NSelect
+                      v-else-if="question.type === 'select'"
+                      :value="getQuestionnaireTextAnswer(question.name)"
+                      :options="question.options.map(option => ({ label: option.label, value: option.value }))"
+                      placeholder="请选择"
+                      @update:value="value => updateQuestionnaireAnswer(question.name, String(value || ''))"
+                    />
+                    <NRadioGroup
+                      v-else-if="question.type === 'radio'"
+                      :value="getQuestionnaireTextAnswer(question.name)"
+                      @update:value="value => updateQuestionnaireAnswer(question.name, String(value || ''))"
+                    >
+                      <NSpace vertical size="small">
+                        <NRadio v-for="option in question.options" :key="option.value" :value="option.value">
+                          {{ option.label }}
+                        </NRadio>
+                      </NSpace>
+                    </NRadioGroup>
+                    <NCheckboxGroup
+                      v-else-if="question.type === 'checkbox'"
+                      :value="getQuestionnaireMultiAnswer(question.name)"
+                      @update:value="value => updateQuestionnaireAnswer(question.name, (value || []).map(item => String(item)))"
+                    >
+                      <NSpace vertical size="small">
+                        <NCheckbox v-for="option in question.options" :key="option.value" :value="option.value">
+                          {{ option.label }}
+                        </NCheckbox>
+                      </NSpace>
+                    </NCheckboxGroup>
+                    <div v-else class="questionnaire-builder__unsupported">
+                      当前题型 {{ question.type }} 暂未识别，请重新读取确认页或直接检查平台页面结构。
+                    </div>
+
+                    <div class="questionnaire-builder__field">{{ question.name }}</div>
+                  </div>
+                </div>
+              </div>
+
               <div class="lottery-scheduler__header">
                 <div>
                   <div class="lottery-scheduler__title">按时间分批执行</div>
@@ -3909,6 +4310,121 @@ function handleSearch() {
 
   100% {
     transform: translateX(0);
+  }
+}
+
+.questionnaire-builder {
+  margin-bottom: 18px;
+  border: 1px solid #d9e6ff;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #f8fbff 0%, #fdfefe 100%);
+  padding: 18px;
+}
+
+.questionnaire-builder__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.questionnaire-builder__title {
+  color: #172033;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.questionnaire-builder__hint {
+  margin-top: 6px;
+  color: #5f6b85;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.questionnaire-builder__toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.questionnaire-builder__selector {
+  min-width: 0;
+}
+
+.questionnaire-builder__tips,
+.questionnaire-builder__warning {
+  margin-top: 12px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.questionnaire-builder__tips {
+  background: #eef5ff;
+  color: #46618f;
+}
+
+.questionnaire-builder__warning {
+  background: #fff7e8;
+  color: #9a6a17;
+}
+
+.questionnaire-builder__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.questionnaire-builder__item {
+  border: 1px solid #e7edf8;
+  border-radius: 14px;
+  background: #fff;
+  padding: 14px;
+}
+
+.questionnaire-builder__item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.questionnaire-builder__item-title {
+  color: #1d2b45;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.questionnaire-builder__item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.questionnaire-builder__field {
+  margin-top: 10px;
+  color: #8a97b2;
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.questionnaire-builder__unsupported {
+  border-radius: 10px;
+  background: #f6f8fc;
+  color: #6a7792;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 10px 12px;
+}
+
+@media (max-width: 900px) {
+  .questionnaire-builder__toolbar {
+    grid-template-columns: 1fr;
   }
 }
 

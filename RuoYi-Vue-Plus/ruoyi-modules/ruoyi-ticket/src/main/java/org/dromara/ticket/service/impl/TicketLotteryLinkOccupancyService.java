@@ -15,8 +15,10 @@ import org.dromara.ticket.mapper.TicketSaleTaskMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -30,6 +32,11 @@ import java.util.stream.Collectors;
 public class TicketLotteryLinkOccupancyService {
 
     private static final Set<String> OCCUPIED_EXECUTION_STATUSES = Set.of("submitted", "pending_payment", "paid", "completed");
+    private static final Comparator<TicketOrderExecution> OCCUPANCY_ORDER = Comparator
+        .comparing(TicketOrderExecution::getExecutedAt, Comparator.nullsLast(Date::compareTo))
+        .thenComparing(TicketOrderExecution::getStartedAt, Comparator.nullsLast(Date::compareTo))
+        .thenComparing(TicketOrderExecution::getExecutionId, Comparator.nullsLast(Long::compareTo))
+        .reversed();
 
     private final TicketOrderExecutionMapper orderExecutionMapper;
     private final TicketSaleTaskMapper saleTaskMapper;
@@ -48,22 +55,13 @@ public class TicketLotteryLinkOccupancyService {
             return Map.of();
         }
 
-        LambdaQueryWrapper<TicketOrderExecution> indexedWrapper = baseWrapper(targetAccountIds, targetPlatformIds, excludeTaskId)
-            .select(
-                TicketOrderExecution::getExecutionId,
-                TicketOrderExecution::getTaskId,
-                TicketOrderExecution::getPlatformId,
-                TicketOrderExecution::getAccountId,
-                TicketOrderExecution::getLotteryEventUrl,
-                TicketOrderExecution::getExecutionStatus,
-                TicketOrderExecution::getStartedAt,
-                TicketOrderExecution::getExecutedAt
-            )
-            .eq(TicketOrderExecution::getLotteryEventUrl, normalizedEventUrl)
-            .orderByDesc(TicketOrderExecution::getExecutedAt)
-            .orderByDesc(TicketOrderExecution::getStartedAt)
-            .orderByDesc(TicketOrderExecution::getExecutionId);
-        Map<Long, OccupancyInfo> occupiedMap = new HashMap<>(buildMap(orderExecutionMapper.selectList(indexedWrapper)));
+        List<TicketOrderExecution> indexedExecutions = sortExecutions(orderExecutionMapper.selectLotteryOccupanciesByEvent(
+            targetAccountIds,
+            targetPlatformIds,
+            normalizedEventUrl,
+            excludeTaskId
+        ));
+        Map<Long, OccupancyInfo> occupiedMap = new HashMap<>(buildMap(indexedExecutions));
 
         List<Long> fallbackAccountIds = targetAccountIds.stream()
             .filter(accountId -> !occupiedMap.containsKey(accountId))
@@ -72,33 +70,29 @@ public class TicketLotteryLinkOccupancyService {
             return occupiedMap;
         }
 
-        LambdaQueryWrapper<TicketOrderExecution> fallbackWrapper = baseWrapper(fallbackAccountIds, targetPlatformIds, excludeTaskId)
-            .select(
-                TicketOrderExecution::getExecutionId,
-                TicketOrderExecution::getTaskId,
-                TicketOrderExecution::getPlatformId,
-                TicketOrderExecution::getAccountId,
-                TicketOrderExecution::getConfigSnapshot,
-                TicketOrderExecution::getLotteryEventUrl,
-                TicketOrderExecution::getExecutionStatus,
-                TicketOrderExecution::getStartedAt,
-                TicketOrderExecution::getExecutedAt
-            )
-            .and(wrapper -> wrapper.isNull(TicketOrderExecution::getLotteryEventUrl).or().eq(TicketOrderExecution::getLotteryEventUrl, ""))
-            .orderByDesc(TicketOrderExecution::getExecutedAt)
-            .orderByDesc(TicketOrderExecution::getStartedAt)
-            .orderByDesc(TicketOrderExecution::getExecutionId);
-        occupiedMap.putAll(querySnapshotFallback(orderExecutionMapper.selectList(fallbackWrapper), normalizedEventUrl));
+        List<TicketOrderExecution> fallbackExecutions = new ArrayList<>();
+        fallbackExecutions.addAll(orderExecutionMapper.selectLotteryOccupanciesWithBlankEventUrl(
+            fallbackAccountIds,
+            targetPlatformIds,
+            excludeTaskId
+        ));
+        fallbackExecutions.addAll(orderExecutionMapper.selectLotteryOccupanciesWithNullEventUrl(
+            fallbackAccountIds,
+            targetPlatformIds,
+            excludeTaskId
+        ));
+        occupiedMap.putAll(querySnapshotFallback(sortExecutions(fallbackExecutions), normalizedEventUrl));
         return occupiedMap;
     }
 
-    private LambdaQueryWrapper<TicketOrderExecution> baseWrapper(Collection<Long> accountIds, Collection<Long> platformIds, Long excludeTaskId) {
-        return new LambdaQueryWrapper<TicketOrderExecution>()
-            .in(TicketOrderExecution::getAccountId, accountIds)
-            .in(CollUtil.isNotEmpty(platformIds), TicketOrderExecution::getPlatformId, platformIds)
-            .eq(TicketOrderExecution::getPurchaseType, "lottery")
-            .in(TicketOrderExecution::getExecutionStatus, OCCUPIED_EXECUTION_STATUSES)
-            .ne(ObjectUtil.isNotNull(excludeTaskId), TicketOrderExecution::getTaskId, excludeTaskId);
+    private List<TicketOrderExecution> sortExecutions(List<TicketOrderExecution> executions) {
+        if (CollUtil.isEmpty(executions)) {
+            return List.of();
+        }
+        return executions.stream()
+            .filter(Objects::nonNull)
+            .sorted(OCCUPANCY_ORDER)
+            .toList();
     }
 
     private Map<Long, OccupancyInfo> buildMap(List<TicketOrderExecution> executions) {

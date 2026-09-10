@@ -641,6 +641,53 @@ declare namespace Api {
       lotterySchedules?: SaleTaskSchedule[];
     }>;
 
+    type LivePocketQuestionnaireOption = {
+      value: string;
+      label: string;
+    };
+
+    type LivePocketQuestionnaireQuestion = {
+      name: string;
+      label: string;
+      type: 'text' | 'textarea' | 'radio' | 'checkbox' | 'select' | string;
+      required: boolean;
+      options: LivePocketQuestionnaireOption[];
+    };
+
+    type LivePocketQuestionnaireConfig = {
+      enabled: boolean;
+      mode: string;
+      previewAccountId?: CommonType.IdType;
+      previewSessionId?: string;
+      previewAt?: string;
+      schemaSignature?: string;
+      questions: LivePocketQuestionnaireQuestion[];
+      answers: Record<string, string | string[]>;
+    };
+
+    type LivePocketQuestionnairePreviewParams = {
+      platformId: CommonType.IdType;
+      accountId: CommonType.IdType;
+      lotteryEventUrl: string;
+      selectedSessionId: string;
+      taskOptions: string;
+    };
+
+    type LivePocketQuestionnairePreviewResult = {
+      questionnaireConfig?: LivePocketQuestionnaireConfig;
+      confirmUrl?: string;
+      requestUrl?: string;
+      resultUrl?: string;
+      eventId?: string;
+      reserveId?: string;
+      sessionId?: string;
+      sessionLabel?: string;
+      authSource?: string;
+      loginReqData?: string;
+      questionCount?: number;
+      rawResult?: string;
+    };
+
     type SaleTaskList = Api.Common.PaginatingQueryRecord<SaleTask>;
 
     type OrderExecution = Common.CommonTenantRecord<{

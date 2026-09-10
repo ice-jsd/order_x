@@ -37,6 +37,14 @@ export function fetchGetTicketSaleTaskProcessExecutions(
   });
 }
 
+export function fetchPreviewLivePocketQuestionnaire(data: Api.Ticket.LivePocketQuestionnairePreviewParams) {
+  return request<Api.Ticket.LivePocketQuestionnairePreviewResult>({
+    url: '/ticket/sale-task/livepocket/questionnaire-preview',
+    method: 'post',
+    data
+  });
+}
+
 export function fetchCreateTicketSaleTask(data: Api.Ticket.SaleTaskOperateParams) {
   return request<boolean>({ url: '/ticket/sale-task', method: 'post', data: normalizeSaleTaskPayload(data) });
 }

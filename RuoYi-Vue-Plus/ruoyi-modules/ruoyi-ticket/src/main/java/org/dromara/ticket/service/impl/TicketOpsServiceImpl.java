@@ -34,6 +34,7 @@ import org.dromara.ticket.domain.bo.*;
 import org.dromara.ticket.domain.dto.TicketLoginProgressMessage;
 import org.dromara.ticket.domain.dto.TicketOrderDispatchRequest;
 import org.dromara.ticket.domain.dto.TicketRegisterProgressMessage;
+import org.dromara.ticket.domain.dto.TicketSaleTaskAccountCountDto;
 import org.dromara.ticket.domain.vo.*;
 import org.dromara.ticket.mapper.*;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -42,6 +43,7 @@ import org.springframework.data.redis.connection.stream.StreamRecords;
 import org.dromara.ticket.service.ITicketJumpShopProfileService;
 import org.dromara.ticket.service.ITicketOpsService;
 import org.dromara.ticket.service.ITicketMailboxAccountService;
+import org.dromara.ticket.service.TicketDashboardOverviewCounterService;
 import org.dromara.ticket.service.TicketLotteryResultMailService;
 import org.dromara.ticket.service.TicketPythonExecutorClient;
 import org.dromara.ticket.service.TicketPythonQueueHandler;
@@ -173,6 +175,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
     private final TicketLotteryBatchTaskService ticketLotteryBatchTaskService;
     private final TicketLotteryLinkOccupancyService ticketLotteryLinkOccupancyService;
     private final ITicketJumpShopProfileService jumpShopProfileService;
+    private final TicketDashboardOverviewCounterService ticketDashboardOverviewCounterService;
     @Qualifier("ticketPythonStringRedisTemplate")
     private final StringRedisTemplate ticketPythonStringRedisTemplate;
     private final TransactionTemplate transactionTemplate;
@@ -181,50 +184,11 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
 
     @Override
     public TicketDashboardOverviewVo selectDashboardOverview() {
-        TicketDashboardOverviewVo overview = new TicketDashboardOverviewVo();
-        overview.setPlatformTotal(platformMapper.selectCount(Wrappers.lambdaQuery()));
-        overview.setEnabledPlatformCount(platformMapper.selectCount(Wrappers.lambdaQuery(TicketPlatformConfig.class)
-            .eq(TicketPlatformConfig::getEnabled, Boolean.TRUE)));
-
-        overview.setTaskTotal(saleTaskMapper.selectCount(Wrappers.lambdaQuery()));
-        overview.setRunningTaskCount(saleTaskMapper.selectCount(Wrappers.lambdaQuery(TicketSaleTask.class)
-            .eq(TicketSaleTask::getTaskStatus, "executing")));
-        overview.setAbnormalTaskCount(saleTaskMapper.selectCount(Wrappers.lambdaQuery(TicketSaleTask.class)
-            .in(TicketSaleTask::getTaskStatus, List.of("failed", "blocked"))));
-
-        overview.setExecutionTotal(orderExecutionMapper.selectCount(Wrappers.lambdaQuery()));
-        overview.setRunningExecutionCount(orderExecutionMapper.selectCount(Wrappers.lambdaQuery(TicketOrderExecution.class)
-            .in(TicketOrderExecution::getExecutionStatus, List.of("running", "queued"))));
-        overview.setSuccessExecutionCount(orderExecutionMapper.selectCount(Wrappers.lambdaQuery(TicketOrderExecution.class)
-            .in(TicketOrderExecution::getExecutionStatus, List.of("submitted", "paid", "completed"))));
-        overview.setAbnormalExecutionCount(orderExecutionMapper.selectCount(Wrappers.lambdaQuery(TicketOrderExecution.class)
-            .in(TicketOrderExecution::getExecutionStatus, List.of("failed", "timeout", "blocked"))));
-
-        overview.setAccountTotal(accountMapper.selectCount(Wrappers.lambdaQuery()));
-        overview.setLoggedInAccountCount(accountMapper.selectCount(Wrappers.lambdaQuery(TicketManagedAccount.class)
-            .eq(TicketManagedAccount::getLoginStatus, "logged_in")));
-        overview.setActivatedAccountCount(accountMapper.selectCount(Wrappers.lambdaQuery(TicketManagedAccount.class)
-            .eq(TicketManagedAccount::getAccountStatus, "activated")));
-        overview.setAccountErrorCount(accountMapper.selectCount(Wrappers.lambdaQuery(TicketManagedAccount.class)
-            .and(wrapper -> wrapper.eq(TicketManagedAccount::getLoginStatus, "login_failed")
-                .or()
-                .isNotNull(TicketManagedAccount::getLastError)
-                .ne(TicketManagedAccount::getLastError, ""))));
-
-        overview.setMailboxTotal(mailboxAccountMapper.selectCount(Wrappers.lambdaQuery()));
-        overview.setMailboxErrorCount(mailboxAccountMapper.selectCount(Wrappers.lambdaQuery(TicketMailboxAccount.class)
-            .and(wrapper -> wrapper.isNotNull(TicketMailboxAccount::getLastError)
-                .ne(TicketMailboxAccount::getLastError, "")
-                .or()
-                .isNotNull(TicketMailboxAccount::getLastMailSyncError)
-                .ne(TicketMailboxAccount::getLastMailSyncError, ""))));
-        overview.setUnusedMailboxCount(mailboxAccountMapper.selectCount(Wrappers.lambdaQuery(TicketMailboxAccount.class)
-            .isNull(TicketMailboxAccount::getUsedAccountId)));
-
-        overview.setRecentTasks(selectSaleTaskPage(new TicketSaleTaskBo(), dashboardPage(8)).getRows());
-        overview.setRecentExecutions(selectOrderExecutionPage(new TicketOrderExecutionBo(), dashboardPage(6)).getRows());
-        overview.setRecentRegistrationBatches(selectRegistrationBatchPage(new TicketRegistrationBatchBo(), dashboardPage(6)).getRows());
-        overview.setRecentLoginBatches(selectLoginBatchPage(new TicketLoginBatchBo(), dashboardPage(6)).getRows());
+        TicketDashboardOverviewVo overview = ticketDashboardOverviewCounterService.populateOverview(new TicketDashboardOverviewVo());
+        overview.setRecentTasks(selectDashboardRecentTasks(8));
+        overview.setRecentExecutions(selectDashboardRecentExecutions(6));
+        overview.setRecentRegistrationBatches(selectDashboardRecentRegistrationBatches(6));
+        overview.setRecentLoginBatches(selectDashboardRecentLoginBatches(6));
         return overview;
     }
 
@@ -347,10 +311,6 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
         resultVo.setSkippedNumbers(skipped);
         recordAudit("phone", "bulkImport", "phone", String.valueOf(entities.size()), "success", "号码批量导入完成", resultVo);
         return resultVo;
-    }
-
-    private PageQuery dashboardPage(int pageSize) {
-        return new PageQuery(1, pageSize);
     }
 
     @Override
@@ -1632,6 +1592,93 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
         planSaleTaskSchedule(entity.getTaskId(), LoginHelper.getUserId(), "update", false);
         recordAudit("saleTask", "update", "saleTask", String.valueOf(entity.getTaskId()), "success", "任务已更新", bo);
         return rows;
+    }
+
+    @Override
+    public TicketLivePocketQuestionnairePreviewVo previewLivePocketQuestionnaire(TicketLivePocketQuestionnairePreviewBo bo) {
+        if (!ticketPythonExecutorProperties.isEnabled()) {
+            throw new ServiceException("Python 抽票执行器未启用");
+        }
+        TicketPlatformConfig platform = requirePlatform(bo.getPlatformId());
+        if (!isLivePocketPlatform(platform)) {
+            throw new ServiceException("当前平台不是 LivePocket，不能读取确认页问卷");
+        }
+        TicketManagedAccount account = accountMapper.selectById(bo.getAccountId());
+        if (account == null || !Objects.equals(account.getPlatformId(), platform.getPlatformId())) {
+            throw new ServiceException("预读账号不存在或不属于当前平台");
+        }
+        if (!"activated".equals(account.getAccountStatus())) {
+            throw new ServiceException("读取确认页问卷只能使用已激活账号");
+        }
+        if (StringUtils.isBlank(account.getLoginReqData())) {
+            throw new ServiceException("预读账号缺少 LivePocket 登录态，请先完成登录");
+        }
+
+        Map<String, Object> parsedOptions = new LinkedHashMap<>(TicketOrderFlowSupport.parseTaskOptions(bo.getTaskOptions()));
+        String eventUrl = StringUtils.defaultIfBlank(
+            normalizeLotteryEventUrl(StringUtils.trim(bo.getLotteryEventUrl())),
+            normalizeLotteryEventUrl(StringUtils.trim(Convert.toStr(parsedOptions.get("eventUrl"))))
+        );
+        if (StringUtils.isBlank(eventUrl)) {
+            throw new ServiceException("请先解析抽票活动链接");
+        }
+        parsedOptions.put("eventUrl", eventUrl);
+
+        String selectedSessionId = StringUtils.trim(bo.getSelectedSessionId());
+        TicketLotteryEventSessionVo sessionMeta = findSelectedLotterySession(JSONUtil.toJsonStr(parsedOptions), selectedSessionId);
+        if (sessionMeta == null || StringUtils.isBlank(sessionMeta.getSessionId())) {
+            throw new ServiceException("请先选择一个抽選场次后再读取问卷");
+        }
+        if (!isLotteryDrawSalesType(sessionMeta.getSalesType())) {
+            throw new ServiceException("当前场次不是抽選受付，不能读取问卷");
+        }
+        TicketLotteryEventSessionVo latestSessionMeta = findLatestParsedLotterySession(platform.getPlatformId(), JSONUtil.toJsonStr(parsedOptions), selectedSessionId);
+        if (latestSessionMeta != null) {
+            sessionMeta = mergeLotterySessionMeta(sessionMeta, latestSessionMeta);
+        }
+
+        parsedOptions.put("sessionId", sessionMeta.getSessionId());
+        parsedOptions.put("sessionLabel", StringUtils.defaultIfBlank(sessionMeta.getSessionLabel(), sessionMeta.getSessionId()));
+        putIfNotBlank(parsedOptions, "receptionId", sessionMeta.getReceptionId());
+        putIfNotBlank(parsedOptions, "receptionTitle", sessionMeta.getReceptionTitle());
+        putIfNotBlank(parsedOptions, "ticketId", sessionMeta.getTicketId());
+        putIfNotBlank(parsedOptions, "ticketField", sessionMeta.getTicketField());
+        putIfNotBlank(parsedOptions, "salesType", sessionMeta.getSalesType());
+        parsedOptions.put("entryQuantity", Math.max(Convert.toInt(parsedOptions.get("entryQuantity"), 1), 1));
+        parsedOptions.put("purchaseQuantity", 1);
+
+        String ticketEntryUrl = firstLivePocketLotteryTicketsUrl(parsedOptions, sessionMeta.getEventUrl(), eventUrl);
+        if (StringUtils.isBlank(ticketEntryUrl)
+            && StringUtils.isNotBlank(sessionMeta.getReceptionId())
+            && !sessionMeta.getReceptionId().startsWith("group:")) {
+            ticketEntryUrl = buildLivePocketTicketsUrl(eventUrl, sessionMeta.getReceptionId());
+        }
+        applyLivePocketLotteryTicketsUrl(parsedOptions, ticketEntryUrl);
+
+        String password = resolveAccountPassword(account);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("platformId", platform.getPlatformId());
+        payload.put("platformCode", platform.getPlatformCode());
+        payload.put("backendBaseUrl", requirePythonBackendBaseUrl());
+        payload.put("accountId", account.getAccountId());
+        payload.put("email", account.getEmail());
+        payload.put("password", password);
+        payload.put("platformPassword", password);
+        payload.put("accountInfo", account.getAccountInfo());
+        payload.put("loginReqData", account.getLoginReqData());
+        payload.put("purchaseType", "lottery");
+        payload.put("selectedSessionId", sessionMeta.getSessionId());
+        payload.put("sessionId", sessionMeta.getSessionId());
+        payload.put("sessionLabel", StringUtils.defaultIfBlank(sessionMeta.getSessionLabel(), sessionMeta.getSessionId()));
+        payload.put("receptionId", sessionMeta.getReceptionId());
+        payload.put("ticketId", sessionMeta.getTicketId());
+        payload.put("ticketField", sessionMeta.getTicketField());
+        payload.put("quantityMode", parsedOptions.get("quantityMode"));
+        payload.put("purchaseQuantity", 1);
+        payload.put("lotteryEventUrl", eventUrl);
+        payload.put("taskOptions", JSONUtil.toJsonStr(parsedOptions));
+
+        return ticketPythonExecutorClient.previewLivePocketQuestionnaire(payload);
     }
 
     private void assertSaleTaskEditable(TicketSaleTask task) {
@@ -4092,15 +4139,24 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
         if (CollUtil.isEmpty(rows)) {
             return;
         }
-        rows.forEach(row -> normalizeSaleTaskView(row, includeDetailFields));
         Map<Long, TicketPlatformConfig> platformMap = loadMap(rows.stream().map(TicketSaleTaskVo::getPlatformId).filter(Objects::nonNull).toList(), platformMapper::selectByIds, TicketPlatformConfig::getPlatformId);
         List<Long> taskIds = rows.stream().map(TicketSaleTaskVo::getTaskId).filter(Objects::nonNull).toList();
+        rows.forEach(row -> normalizeSaleTaskView(row, includeDetailFields, platformMap.get(row.getPlatformId())));
         Map<Long, Map<String, Integer>> executionSummaryMap = buildSaleTaskExecutionSummaryMap(rows);
-        Map<Long, List<TicketSaleTaskAccount>> bindingMap = saleTaskAccountMapper.selectList(new LambdaQueryWrapper<TicketSaleTaskAccount>()
-                .in(CollUtil.isNotEmpty(taskIds), TicketSaleTaskAccount::getTaskId, taskIds)
-                .orderByAsc(TicketSaleTaskAccount::getBindingId))
-            .stream()
-            .collect(Collectors.groupingBy(TicketSaleTaskAccount::getTaskId, LinkedHashMap::new, Collectors.toList()));
+        Map<Long, List<TicketSaleTaskAccount>> bindingMap = includeDetailFields
+            ? saleTaskAccountMapper.selectList(new LambdaQueryWrapper<TicketSaleTaskAccount>()
+                    .in(CollUtil.isNotEmpty(taskIds), TicketSaleTaskAccount::getTaskId, taskIds)
+                    .orderByAsc(TicketSaleTaskAccount::getBindingId))
+                .stream()
+                .collect(Collectors.groupingBy(TicketSaleTaskAccount::getTaskId, LinkedHashMap::new, Collectors.toList()))
+            : Map.of();
+        Map<Long, Integer> boundAccountCountMap = includeDetailFields
+            ? Map.of()
+            : saleTaskAccountMapper.selectAccountCountsByTaskIds(taskIds).stream()
+                .collect(Collectors.toMap(TicketSaleTaskAccountCountDto::getTaskId,
+                    item -> Convert.toInt(item.getAccountCount(), 0),
+                    (left, right) -> left,
+                    LinkedHashMap::new));
         Map<Long, List<TicketSaleTaskScheduleVo>> scheduleMap = saleTaskScheduleMapper.selectVoList(new LambdaQueryWrapper<TicketSaleTaskSchedule>()
                 .in(CollUtil.isNotEmpty(taskIds), TicketSaleTaskSchedule::getTaskId, taskIds)
                 .orderByAsc(TicketSaleTaskSchedule::getScheduledTime)
@@ -4121,8 +4177,12 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
                 row.setPlatformName(platform.getPlatformName());
             }
             List<TicketSaleTaskAccount> bindings = bindingMap.getOrDefault(row.getTaskId(), List.of());
-            List<Long> accountIds = bindings.stream().map(TicketSaleTaskAccount::getAccountId).filter(Objects::nonNull).toList();
-            row.setBoundAccountCount(accountIds.size());
+            List<Long> accountIds = includeDetailFields
+                ? bindings.stream().map(TicketSaleTaskAccount::getAccountId).filter(Objects::nonNull).toList()
+                : List.of();
+            row.setBoundAccountCount(includeDetailFields
+                ? accountIds.size()
+                : boundAccountCountMap.getOrDefault(row.getTaskId(), 0));
             List<TicketSaleTaskScheduleVo> schedules = scheduleMap.getOrDefault(row.getTaskId(), List.of());
             row.setLotteryScheduleCount(schedules.size());
             row.setExecutionSummary(executionSummaryMap.getOrDefault(row.getTaskId(), Map.of("total", 0)));
@@ -4144,6 +4204,39 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
                 row.setSelectedSessions(null);
             }
         }
+    }
+
+    private List<TicketSaleTaskVo> selectDashboardRecentTasks(int limit) {
+        List<TicketSaleTaskVo> rows = saleTaskMapper.selectVoList(new LambdaQueryWrapper<TicketSaleTask>()
+            .orderByDesc(TicketSaleTask::getTaskId)
+            .last("LIMIT " + limit));
+        enrichSaleTasks(rows, false);
+        return rows;
+    }
+
+    private List<TicketOrderExecutionVo> selectDashboardRecentExecutions(int limit) {
+        List<TicketOrderExecutionVo> rows = orderExecutionMapper.selectVoList(new LambdaQueryWrapper<TicketOrderExecution>()
+            .orderByDesc(TicketOrderExecution::getExecutionId)
+            .last("LIMIT " + limit));
+        enrichOrderExecutions(rows);
+        trimOrderExecutionListPayload(rows);
+        return rows;
+    }
+
+    private List<TicketRegistrationBatchVo> selectDashboardRecentRegistrationBatches(int limit) {
+        List<TicketRegistrationBatchVo> rows = registrationBatchMapper.selectVoList(new LambdaQueryWrapper<TicketRegistrationBatch>()
+            .orderByDesc(TicketRegistrationBatch::getBatchId)
+            .last("LIMIT " + limit));
+        enrichRegistrationBatches(rows);
+        return rows;
+    }
+
+    private List<TicketLoginBatchVo> selectDashboardRecentLoginBatches(int limit) {
+        List<TicketLoginBatchVo> rows = loginBatchMapper.selectVoList(new LambdaQueryWrapper<TicketLoginBatch>()
+            .orderByDesc(TicketLoginBatch::getBatchId)
+            .last("LIMIT " + limit));
+        enrichLoginBatches(rows);
+        return rows;
     }
 
     private void enrichOrderExecutions(List<TicketOrderExecutionVo> rows) {
@@ -5906,13 +5999,10 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
         return base;
     }
 
-    private void normalizeSaleTaskView(TicketSaleTaskVo row, boolean includeDetailFields) {
+    private void normalizeSaleTaskView(TicketSaleTaskVo row, boolean includeDetailFields, TicketPlatformConfig platform) {
         row.setPurchaseType(TicketOrderFlowSupport.defaultPurchaseType(row.getPurchaseType()));
-        if (StringUtils.isBlank(row.getConfigSchemaKey()) && ObjectUtil.isNotNull(row.getPlatformId())) {
-            TicketPlatformConfig platform = platformMapper.selectById(row.getPlatformId());
-            if (platform != null) {
-                row.setConfigSchemaKey(TicketOrderFlowSupport.resolveConfigSchemaKey(platform, row.getPurchaseType()));
-            }
+        if (StringUtils.isBlank(row.getConfigSchemaKey()) && platform != null) {
+            row.setConfigSchemaKey(TicketOrderFlowSupport.resolveConfigSchemaKey(platform, row.getPurchaseType()));
         }
         String taskOptionsText = StringUtils.defaultIfBlank(row.getTaskOptions(), "{}");
         Map<String, Object> options = TicketOrderFlowSupport.parseTaskOptions(taskOptionsText);

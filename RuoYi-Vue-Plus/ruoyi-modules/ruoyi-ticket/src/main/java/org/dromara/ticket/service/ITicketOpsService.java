@@ -96,6 +96,8 @@ public interface ITicketOpsService {
 
     int updateSaleTask(TicketSaleTaskBo bo);
 
+    TicketLivePocketQuestionnairePreviewVo previewLivePocketQuestionnaire(TicketLivePocketQuestionnairePreviewBo bo);
+
     int cancelSaleTask(Long taskId);
 
     int removeSaleTasks(Long[] taskIds);

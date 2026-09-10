@@ -9,7 +9,9 @@ import org.dromara.common.log.enums.BusinessType;
 import org.dromara.common.mybatis.core.page.PageQuery;
 import org.dromara.common.mybatis.core.page.TableDataInfo;
 import org.dromara.common.web.core.BaseController;
+import org.dromara.ticket.domain.bo.TicketLivePocketQuestionnairePreviewBo;
 import org.dromara.ticket.domain.bo.TicketSaleTaskBo;
+import org.dromara.ticket.domain.vo.TicketLivePocketQuestionnairePreviewVo;
 import org.dromara.ticket.domain.vo.TicketSaleTaskProcessVo;
 import org.dromara.ticket.domain.vo.TicketSaleTaskVo;
 import org.dromara.ticket.service.ITicketOpsService;
@@ -59,6 +61,14 @@ public class TicketSaleTaskController extends BaseController {
     @PostMapping
     public R<Void> add(@RequestBody TicketSaleTaskBo bo) {
         return toAjax(ticketOpsService.saveSaleTask(bo));
+    }
+
+    @SaCheckPermission("ticket:saleTask:add")
+    @PostMapping("/livepocket/questionnaire-preview")
+    public R<TicketLivePocketQuestionnairePreviewVo> previewLivePocketQuestionnaire(
+        @Validated @RequestBody TicketLivePocketQuestionnairePreviewBo bo
+    ) {
+        return R.ok(ticketOpsService.previewLivePocketQuestionnaire(bo));
     }
 
     @SaCheckPermission("ticket:saleTask:edit")
