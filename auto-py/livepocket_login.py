@@ -1,5 +1,5 @@
 """
-livepocket.jp 登录协议实现 - 带 Google reCAPTCHA v2 处理
+livepocket.jp 登录协议实现 - 支持 Cloudflare Turnstile 和旧版 Google reCAPTCHA v2
 使用打码平台: CapSolver
 """
 import requests
@@ -9,6 +9,7 @@ import uuid
 import random
 import html
 import os
+from html.parser import HTMLParser
 from datetime import datetime
 from urllib.parse import urlencode, quote
 from typing import Any, Callable, Dict, List, Optional
@@ -32,6 +33,59 @@ LOGGER = get_logger("livepocket.login")
 print = LOGGER.print
 
 
+class _TurnstileConfigParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.detected = False
+        self.site_key = ""
+        self.action = ""
+        self.cdata = ""
+
+    def handle_starttag(self, tag, attrs):
+        attributes = {str(name or "").lower(): str(value or "") for name, value in attrs}
+        class_names = set(attributes.get("class", "").split())
+        controllers = set(attributes.get("data-controller", "").split())
+        script_src = attributes.get("src", "").lower()
+        input_name = attributes.get("name", "").lower()
+        is_widget = (
+            "turnstile" in controllers
+            or "turnstile-widget" in class_names
+            or "cf-turnstile" in class_names
+        )
+        if (
+            is_widget
+            or input_name == "cf-turnstile-response"
+            or "challenges.cloudflare.com/turnstile/" in script_src
+        ):
+            self.detected = True
+
+        site_key = attributes.get("data-turnstile-sitekey-value", "")
+        if not site_key and is_widget:
+            site_key = attributes.get("data-sitekey", "")
+        if site_key and not self.site_key:
+            self.site_key = site_key
+            self.action = (
+                attributes.get("data-turnstile-action-value", "")
+                or attributes.get("data-action", "")
+            )
+            self.cdata = (
+                attributes.get("data-turnstile-cdata-value", "")
+                or attributes.get("data-cdata", "")
+            )
+
+
+def extract_turnstile_config(html_text: str) -> Dict[str, Any]:
+    parser = _TurnstileConfigParser()
+    parser.feed(html_text or "")
+    parser.close()
+    return {
+        "detected": parser.detected,
+        "siteKey": parser.site_key,
+        "action": parser.action,
+        "cdata": parser.cdata,
+    }
+
+
 class LivePocketLogin:
     """livepocket.jp 登录"""
 
@@ -45,9 +99,10 @@ class LivePocketLogin:
         if self.proxy:
             print(f"[Proxy] LivePocket 登录使用代理: {self.proxy.masked()}, key={self.proxy_key or '-'}")
 
-        # 从抓包提取的关键信息
+        # 旧版 reCAPTCHA 回退配置；Turnstile 参数从登录页动态提取。
         self.site_key = '6Ld50ncqAAAAAJuHR7I6dNVXfnKme_WTP2SKS168'
         self.login_url = 'https://livepocket.jp/login'
+        self.turnstile_config = {"detected": False, "siteKey": "", "action": "", "cdata": ""}
 
         # 设置请求头（使用手机模式 User-Agent）
         self.session.headers.update({
@@ -288,9 +343,19 @@ class LivePocketLogin:
             raise LivePocketProxyError(reason)
 
         csrf_token = self._extract_meta_content(resp.text, 'csrf-token') or token
+        self.turnstile_config = extract_turnstile_config(resp.text)
+        if self.turnstile_config["detected"] and not self.turnstile_config["siteKey"]:
+            raise RuntimeError("登录页检测到 Cloudflare Turnstile，但未找到 site key")
 
         print(f"[1] authenticity_token: {token[:50]}...")
         print(f"[1] csrf_token: {csrf_token[:50]}...")
+        if self.turnstile_config["detected"]:
+            print(
+                "[1] Turnstile 配置: "
+                f"siteKey={self.turnstile_config['siteKey']}, "
+                f"action={self.turnstile_config['action'] or '-'}, "
+                f"hasCdata={bool(self.turnstile_config['cdata'])}"
+            )
 
         # 模拟阅读页面
         time.sleep(random.uniform(2.0, 4.0))
@@ -371,79 +436,88 @@ class LivePocketLogin:
         # 步骤1: 获取 CSRF token
         authenticity_token, csrf_token = self.get_authenticity_token()
 
-        # 步骤2: 解决验证码
-        print(f"[2] 调用打码平台解决 reCAPTCHA v2...")
-        recaptcha_response = self.captcha_solver.solve_recaptcha_v2(
-            site_key=self.site_key,
-            page_url=self.login_url
-        )
-        print(f"[2] g-recaptcha-response: {recaptcha_response[:80]}...")
-
-        # 步骤3: 提交登录表单（两次POST，类似注册）
-        print(f"[3] 提交登录表单（第一次POST）...")
-
-        # 第一次POST - 使用 g-recaptcha-response-data[login]
-        form_data = {
-            'authenticity_token': authenticity_token,
-            'user[email]': email,
-            'user[password]': password,
-            'g-recaptcha-response-data[login]': recaptcha_response,
-            'g-recaptcha-response': '',
-            'commit': ''
-        }
-
         # 添加关键请求头 (Turbo框架)
         headers = {
             'Accept': 'text/vnd.turbo-stream.html, text/html, application/xhtml+xml',
             'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+            'Referer': self.login_url,
             'X-CSRF-Token': csrf_token,
             'X-Turbo-Request-Id': str(uuid.uuid4()),
             'Sec-Fetch-Mode': 'cors',
             'Sec-Fetch-Dest': 'empty'
         }
 
-        resp = self.session.post(
-            self.login_url,
-            data=form_data,
-            headers=headers,
-            allow_redirects=False
-        )
+        if self.turnstile_config["detected"]:
+            print("[2] 调用打码平台解决 Cloudflare Turnstile...")
+            turnstile_response = self.captcha_solver.solve_turnstile(
+                site_key=self.turnstile_config["siteKey"],
+                page_url=self.login_url,
+                action=self.turnstile_config["action"] or None,
+                cdata=self.turnstile_config["cdata"] or None,
+            )
+            print(f"[2] cf-turnstile-response 已获取: tokenLength={len(turnstile_response)}")
+            form_data = {
+                'authenticity_token': authenticity_token,
+                'user[email]': email,
+                'user[password]': password,
+                'cf-turnstile-response': turnstile_response,
+                'commit': ''
+            }
+            print("[3] 提交 Turnstile 登录表单...")
+            resp = self.session.post(
+                self.login_url,
+                data=form_data,
+                headers=headers,
+                allow_redirects=False
+            )
+            print(f"[3] Turnstile 登录响应: {resp.status_code}")
+        else:
+            print("[2] 调用打码平台解决 reCAPTCHA v2...")
+            recaptcha_response = self.captcha_solver.solve_recaptcha_v2(
+                site_key=self.site_key,
+                page_url=self.login_url
+            )
+            print(f"[2] g-recaptcha-response: {recaptcha_response[:80]}...")
 
-        print(f"[3] 第一次POST响应: {resp.status_code}")
+            print("[3] 提交登录表单（第一次POST）...")
+            form_data = {
+                'authenticity_token': authenticity_token,
+                'user[email]': email,
+                'user[password]': password,
+                'g-recaptcha-response-data[login]': recaptcha_response,
+                'g-recaptcha-response': '',
+                'commit': ''
+            }
+            resp = self.session.post(
+                self.login_url,
+                data=form_data,
+                headers=headers,
+                allow_redirects=False
+            )
+            print(f"[3] 第一次POST响应: {resp.status_code}")
+            if resp.status_code != 200:
+                print("[X] 第一次POST失败")
+                return False
 
-        if resp.status_code != 200:
-            print("[X] 第一次POST失败")
-            return False
-
-        time.sleep(random.uniform(1.5, 3.0))
-
-        # 第二次POST - 使用完整的 g-recaptcha-response
-        print(f"[4] 提交登录表单（第二次POST）...")
-
-        # 提取新token
-        next_token = self._extract_input_value(resp.text, 'authenticity_token')
-        if next_token:
-            authenticity_token = next_token
-
-        # 修改form_data
-        form_data['authenticity_token'] = authenticity_token
-        form_data['g-recaptcha-response'] = recaptcha_response
-        del form_data['g-recaptcha-response-data[login]']
-
-        # 更新headers中的X-Turbo-Request-Id
-        headers['X-Turbo-Request-Id'] = str(uuid.uuid4())
-
-        resp = self.session.post(
-            self.login_url,
-            data=form_data,
-            headers=headers,
-            allow_redirects=False
-        )
-
-        print(f"[4] 第二次POST响应: {resp.status_code}")
+            time.sleep(random.uniform(1.5, 3.0))
+            print("[4] 提交登录表单（第二次POST）...")
+            next_token = self._extract_input_value(resp.text, 'authenticity_token')
+            if next_token:
+                authenticity_token = next_token
+            form_data['authenticity_token'] = authenticity_token
+            form_data['g-recaptcha-response'] = recaptcha_response
+            del form_data['g-recaptcha-response-data[login]']
+            headers['X-Turbo-Request-Id'] = str(uuid.uuid4())
+            resp = self.session.post(
+                self.login_url,
+                data=form_data,
+                headers=headers,
+                allow_redirects=False
+            )
+            print(f"[4] 第二次POST响应: {resp.status_code}")
 
         # 检查登录结果
-        if resp.status_code == 303:
+        if resp.status_code in [302, 303]:
             location = resp.headers.get('Location', '')
             print(f"[OK] Login success! Redirect to: {location}")
 

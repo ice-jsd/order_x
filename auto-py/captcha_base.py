@@ -1,6 +1,6 @@
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any, Dict, Sequence
 
 import requests
 
@@ -58,7 +58,15 @@ class TaskPollingCaptchaVerifier(HCaptchaVerifier):
             raise Exception(f"{submit_error_label}: 响应缺少 taskId")
         return task_id
 
-    def _poll_task_result(self, task_id: str, *, ready_log_label: str, poll_error_label: str, timeout_label: str) -> str:
+    def _poll_task_result(
+        self,
+        task_id: str,
+        *,
+        ready_log_label: str,
+        poll_error_label: str,
+        timeout_label: str,
+        solution_keys: Sequence[str] = ("gRecaptchaResponse",),
+    ) -> str:
         print(f"[{self.provider_name}] {ready_log_label} 任务ID: {task_id}, 等待识别...")
         for _ in range(self.poll_attempts):
             if self.poll_interval_seconds > 0:
@@ -75,9 +83,16 @@ class TaskPollingCaptchaVerifier(HCaptchaVerifier):
             status = str(result.get("status") or "").strip().lower()
             if status == "ready":
                 solution = result.get("solution") or {}
-                token = str(solution.get("gRecaptchaResponse") or "").strip()
+                token = next(
+                    (
+                        str(solution.get(key) or "").strip()
+                        for key in solution_keys
+                        if str(solution.get(key) or "").strip()
+                    ),
+                    "",
+                )
                 if not token:
-                    raise Exception(f"{poll_error_label}: 响应缺少 gRecaptchaResponse")
+                    raise Exception(f"{poll_error_label}: 响应缺少 {'/'.join(solution_keys)}")
                 print(f"[{self.provider_name}] {ready_log_label} 识别成功!")
                 return token
             if status != "processing":

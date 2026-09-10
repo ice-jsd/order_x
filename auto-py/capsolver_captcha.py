@@ -76,6 +76,29 @@ class CapSolverCaptchaVerifier(TaskPollingCaptchaVerifier):
             timeout_label="识别超时",
         )
 
+    def solve_turnstile(self, site_key, page_url, action=None, cdata=None):
+        task_config = {
+            "type": "AntiTurnstileTaskProxyLess",
+            "websiteURL": page_url,
+            "websiteKey": site_key,
+        }
+        metadata = {}
+        if action:
+            metadata["action"] = action
+        if cdata:
+            metadata["cdata"] = cdata
+        if metadata:
+            task_config["metadata"] = metadata
+
+        task_id = self._submit_task(task_config, submit_error_label="提交 Turnstile 失败")
+        return self._poll_task_result(
+            task_id,
+            ready_log_label="Turnstile",
+            poll_error_label="获取 Turnstile 结果失败",
+            timeout_label="Turnstile 识别超时",
+            solution_keys=("token",),
+        )
+
     def solve_hcaptcha(self, site_key, page_url):
         task_id = self._submit_task(
             {
