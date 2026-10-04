@@ -92,14 +92,19 @@ LivePocket 动态代理：
 - `LIVEPOCKET_PROXY_ENABLED`：是否开启 LivePocket 代理，默认 `false`。
 - `LIVEPOCKET_PROXY_SCOPE`：代理生效范围，默认 `all`；可选 `server-only`、`local-only`、`disabled`。
 - `LIVEPOCKET_PROXY_RUNTIME`：手动指定当前运行环境是 `server` 还是 `local`；默认 Windows 视为 `local`，其他系统视为 `server`。
-- `LIVEPOCKET_PROXY_PROVIDER`：代理供应商，默认 `ipweb`。
+- `LIVEPOCKET_PROXY_PROVIDER`：代理供应商，支持 `ipweb`、`decodo`，默认 `ipweb`。
 - `LIVEPOCKET_PROXY_REGION`：代理地区，默认 `JP`。
+- `LIVEPOCKET_PROXY_USERNAME` / `LIVEPOCKET_PROXY_PASSWORD`：Decodo 的代理用户凭据，不是控制台登录邮箱和密码。
+- `LIVEPOCKET_PROXY_GATEWAY`：代理网关；Decodo 使用 `gate.decodo.com:7000`，ipweb 默认使用 `gate1.ipweb.cc:7778`。
+- `LIVEPOCKET_PROXY_TARGET_APPROVED`：仅在 Decodo 已书面确认解锁 `livepocket.jp` 后设为 `true`；默认 `false`，此时程序拒绝生成 Decodo 会话。
+- `LIVEPOCKET_PROXY_SESSION_MINUTES`：Decodo 粘性会话时长，默认 `60`，允许 `1` 到 `1440` 分钟。系统会为每个账号生成独立 session，失败重试时自动换 session。
 - `LIVEPOCKET_PROXY_API_TOKEN`：ipweb API Token。
 - `LIVEPOCKET_PROXY_API_URL`：ipweb 动态代理 API，默认 `http://api.ipweb.cc:8004/api/agent/account2`。
-- `LIVEPOCKET_PROXY_GATEWAY`：ipweb 网关，默认 `gate1.ipweb.cc:7778`。
 - `LIVEPOCKET_PROXY_POOL_MIN` / `LIVEPOCKET_PROXY_BATCH_SIZE`：代理池补充阈值和单次拉取数量。
 - `LIVEPOCKET_PROXY_MAX_ATTEMPTS`：代理失败后更换代理重试次数，默认 `3`。
 - `LIVEPOCKET_PROXY_STATIC`：本地调试用固定代理，格式 `host:port:user:pass` 或 `http://user:pass@host:port`。
+
+Decodo 默认限制 Ticketing 目标。接入 LivePocket 前，需向 Decodo 客服提交目标 URL、用途和预计流量并取得书面解锁确认；控制台账号密码不得写入上述代理凭据变量。
 
 Jump Shop 当前验证码策略：
 

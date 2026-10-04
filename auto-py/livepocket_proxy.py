@@ -2,10 +2,11 @@ import json
 import os
 import random
 import re
+import secrets
 import threading
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
+from urllib.parse import quote, unquote, urlparse
 
 import requests
 
@@ -32,7 +33,9 @@ class LivePocketProxy:
 
     def requests_url(self) -> str:
         if self.username or self.password:
-            return f"http://{self.username}:{self.password}@{self.host}:{self.port}"
+            username = quote(self.username, safe="")
+            password = quote(self.password, safe="")
+            return f"http://{username}:{password}@{self.host}:{self.port}"
         return f"http://{self.host}:{self.port}"
 
     def requests_proxies(self) -> Dict[str, str]:
@@ -123,8 +126,8 @@ def parse_proxy_string(raw: str, provider: str = "ipweb", region: str = "JP") ->
             raw=text,
             host=parsed.hostname,
             port=str(parsed.port),
-            username=parsed.username or "",
-            password=parsed.password or "",
+            username=unquote(parsed.username or ""),
+            password=unquote(parsed.password or ""),
             provider=provider,
             region=region,
         )
@@ -168,9 +171,14 @@ def _extract_ipweb_proxy_items(payload: Any) -> List[str]:
 
 class LivePocketProxyPool:
     def __init__(self) -> None:
-        self.provider = env_text("LIVEPOCKET_PROXY_PROVIDER", "ipweb") or "ipweb"
+        self.provider = (env_text("LIVEPOCKET_PROXY_PROVIDER", "ipweb") or "ipweb").lower()
         self.region = env_text("LIVEPOCKET_PROXY_REGION", "JP") or "JP"
-        self.gateway = env_text("LIVEPOCKET_PROXY_GATEWAY", "gate1.ipweb.cc:7778") or "gate1.ipweb.cc:7778"
+        default_gateway = "gate.decodo.com:7000" if self.provider == "decodo" else "gate1.ipweb.cc:7778"
+        self.gateway = env_text("LIVEPOCKET_PROXY_GATEWAY", default_gateway) or default_gateway
+        self.proxy_username = env_text("LIVEPOCKET_PROXY_USERNAME", "")
+        self.proxy_password = env_text("LIVEPOCKET_PROXY_PASSWORD", "")
+        self.target_approved = bool_value(env_text("LIVEPOCKET_PROXY_TARGET_APPROVED", "false"))
+        self.session_minutes = min(max(env_int("LIVEPOCKET_PROXY_SESSION_MINUTES", 60), 1), 1440)
         self.api_url = env_text("LIVEPOCKET_PROXY_API_URL", "http://api.ipweb.cc:8004/api/agent/account2")
         self.api_token = env_text("LIVEPOCKET_PROXY_API_TOKEN", "")
         self.batch_size = max(env_int("LIVEPOCKET_PROXY_BATCH_SIZE", 10), 1)
@@ -231,6 +239,7 @@ class LivePocketProxyPool:
                 "provider": self.provider,
                 "region": self.region,
                 "gateway": self.gateway,
+                "targetApproved": self.target_approved,
                 "available": len(self._available),
                 "sticky": len(self._sticky),
                 "failed": len(self._failed_raw),
@@ -252,12 +261,17 @@ class LivePocketProxyPool:
 
     def _fetch_proxies(self, count: int, platform_code: str = "livepocket") -> List[LivePocketProxy]:
         logger = proxy_logger(platform_code)
+        if self.provider == "decodo" and not self.target_approved:
+            logger.warning("Decodo Ticketing 目标尚未确认解锁，拒绝启用代理")
+            return []
         static_proxy = env_text("LIVEPOCKET_PROXY_STATIC", "")
         if static_proxy:
             proxy = parse_proxy_string(static_proxy, self.provider, self.region)
             return [proxy] if proxy else []
 
-        if self.provider.lower() != "ipweb":
+        if self.provider == "decodo":
+            return self._build_decodo_proxies(count, logger)
+        if self.provider != "ipweb":
             logger.warning(f"不支持的代理供应商: {self.provider}")
             return []
         if not self.api_token:
@@ -319,6 +333,45 @@ class LivePocketProxyPool:
                 )
             )
         logger.info(f"获取代理完成: count={len(proxies)}, provider={self.provider}, region={self.region}")
+        return proxies
+
+    def _build_decodo_proxies(self, count: int, logger: Any) -> List[LivePocketProxy]:
+        if not self.target_approved:
+            logger.warning("Decodo Ticketing 目标尚未确认解锁，拒绝启用代理")
+            return []
+        if not self.proxy_username or not self.proxy_password:
+            logger.warning("Decodo 代理已开启，但缺少 LIVEPOCKET_PROXY_USERNAME 或 LIVEPOCKET_PROXY_PASSWORD")
+            return []
+
+        gateway_proxy = parse_proxy_string(self.gateway, self.provider, self.region)
+        if not gateway_proxy:
+            logger.warning(f"代理网关格式错误: {self.gateway}")
+            return []
+
+        base_username = self.proxy_username
+        if not base_username.startswith("user-"):
+            base_username = f"user-{base_username}"
+        country = self.region.strip().lower()
+        proxies: List[LivePocketProxy] = []
+        for _ in range(max(count, 1)):
+            session_id = secrets.token_hex(8)
+            username = base_username
+            if country:
+                username = f"{username}-country-{country}"
+            username = f"{username}-session-{session_id}-sessionduration-{self.session_minutes}"
+            raw = f"{gateway_proxy.host}:{gateway_proxy.port}:{username}:{self.proxy_password}"
+            proxies.append(
+                LivePocketProxy(
+                    raw=raw,
+                    host=gateway_proxy.host,
+                    port=gateway_proxy.port,
+                    username=username,
+                    password=self.proxy_password,
+                    provider=self.provider,
+                    region=self.region,
+                )
+            )
+        logger.info(f"生成 Decodo 粘性会话: count={len(proxies)}, region={self.region}")
         return proxies
 
 
