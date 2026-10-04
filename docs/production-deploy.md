@@ -134,7 +134,21 @@ vi .env.local
 ```env
 CAPSOLVER_API_KEY=真实值
 LOTTERY_REDIS_PASSWORD=真实值
+LOTTERY_DELAYED_PROMOTER_ENABLED=false
+HANDS_FORM_DRY_RUN=true
 ```
+
+首次灰度时保持 `HANDS_FORM_DRY_RUN=true`，只验证填写页到最终确认页，不会点击最终提交。确认执行结果包含 `HANDS_DRY_RUN_CONFIRM_READY`，并检查 `/opt/orderx/auto-py/.runtime/hands-form` 的截图和 HTML 后，再改为 `false`。
+重启 Python 服务后先访问 `/health`，确认返回的 `handsFormDryRun=true`、`delayedPromoterEnabled=false`，再创建单账号灰度任务。
+
+Java 服务默认设置 `HANDS_FORM_EXECUTION_MODE=python`、`HANDS_FORM_EXTENSION_ENABLED=false`。需要紧急回退旧扩展时，同时改为：
+
+```env
+HANDS_FORM_EXECUTION_MODE=extension
+HANDS_FORM_EXTENSION_ENABLED=true
+```
+
+回退后重启 Java 服务即可，新领取的 Hands 任务会恢复为“等待 Hands Chrome 扩展领取”。`LOTTERY_DELAYED_PROMOTER_ENABLED` 应继续保持 `false`，延时任务统一由 Java 推进。
 
 如果 Python 服务通过 systemd 指定了其它工作目录也没关系，代码会按自身文件位置读取 `/opt/orderx/auto-py/.env.local`。
 

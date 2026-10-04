@@ -33,7 +33,7 @@ from urllib.parse import parse_qs, unquote, urljoin, urlparse
 import requests
 from lottery_platform_router import resolve_event_parser, resolve_executor
 
-from ticket_runtime import get_logger
+from ticket_runtime import bool_value, get_logger
 from livepocket_purchase import extract_ticket_entry_url as submit_order_extract_ticket_entry_url
 from livepocket_purchase import login_livepocket as submit_order_login_livepocket
 from livepocket_profile import keepalive_livepocket_login, update_livepocket_last_name
@@ -2882,6 +2882,7 @@ class LotteryRedisWorkerConfig:
         self.consumer_name = env_text("LOTTERY_CONSUMER_NAME", default_consumer)
         self.workers = max(env_int("LOTTERY_WORKERS", 5), 1)
         self.event_parse_workers = max(env_int("LOTTERY_EVENT_PARSE_WORKERS", 1), 1)
+        self.delayed_promoter_enabled = bool_value(env_text("LOTTERY_DELAYED_PROMOTER_ENABLED", "false"))
         self.block_ms = max(env_int("LOTTERY_BLOCK_MS", 5000), 1000)
         self.poll_interval_ms = max(env_int("LOTTERY_POLL_INTERVAL_MS", 500), 100)
         self.pending_reclaim_idle_ms = max(env_int("LOTTERY_PENDING_RECLAIM_IDLE_MS", 60000), 5000)
@@ -2930,12 +2931,14 @@ class LotteryRedisWorker:
             f"workers={self.config.workers}, ready={self.config.ready_stream_key}, "
             f"delayed={self.config.delayed_zset_key}, result={self.config.result_stream_key}, "
             f"group={self.config.consumer_group}, consumer={self.config.consumer_name}, "
-            f"eventParseWorkers={self.config.event_parse_workers}, eventParseReady={self.config.event_parse_ready_stream_key}"
+            f"eventParseWorkers={self.config.event_parse_workers}, eventParseReady={self.config.event_parse_ready_stream_key}, "
+            f"delayedPromoterEnabled={self.config.delayed_promoter_enabled}"
         )
         log(f"[lottery-worker] PROXY {proxy_status()}")
-        promoter = threading.Thread(target=self.promote_loop, name="lottery-delayed-promoter", daemon=True)
-        promoter.start()
-        self.threads.append(promoter)
+        if self.config.delayed_promoter_enabled:
+            promoter = threading.Thread(target=self.promote_loop, name="lottery-delayed-promoter", daemon=True)
+            promoter.start()
+            self.threads.append(promoter)
         for index in range(self.config.workers):
             thread = threading.Thread(target=self.worker_loop, args=(index,), name=f"lottery-worker-{index}", daemon=True)
             thread.start()
@@ -3375,6 +3378,8 @@ return 0
             "eventParseReadyStream": self.config.event_parse_ready_stream_key,
             "eventParseResultStream": self.config.event_parse_result_stream_key,
             "delayedZset": self.config.delayed_zset_key,
+            "delayedPromoterEnabled": self.config.delayed_promoter_enabled,
+            "handsFormDryRun": bool_value(env_text("HANDS_FORM_DRY_RUN", "false")),
             "readyLength": self.client.xlen(self.config.ready_stream_key),
             "eventParseReadyLength": self.client.xlen(self.config.event_parse_ready_stream_key),
             "delayedCount": self.client.zcard(self.config.delayed_zset_key),

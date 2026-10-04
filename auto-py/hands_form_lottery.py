@@ -114,6 +114,11 @@ def resolve_hands_execution_input(payload: Dict[str, Any]) -> Dict[str, Any]:
         quantity = max(int(quantity), 1)
     except (TypeError, ValueError):
         quantity = 1
+    dry_run = (
+        bool_value(env_text("HANDS_FORM_DRY_RUN", "false"))
+        or bool_value(task_options.get("handsFormDryRun"))
+        or bool_value(payload.get("handsFormDryRun"))
+    )
     return {
         "eventUrl": str(
             task_options.get("eventUrl")
@@ -125,6 +130,7 @@ def resolve_hands_execution_input(payload: Dict[str, Any]) -> Dict[str, Any]:
         "fullName": full_name,
         "furigana": str(account_info.get("furigana") or "").strip(),
         "quantity": quantity,
+        "dryRun": dry_run,
     }
 
 
@@ -457,7 +463,7 @@ class HandsFormLotteryExecutor:
         submitted = False
         _log(
             f"[hands-form] START executionId={execution_id}, accountId={payload.get('accountId')}, "
-            f"proxy={proxy.masked() if proxy else '-'}, headless={headless}"
+            f"proxy={proxy.masked() if proxy else '-'}, headless={headless}, dryRun={values['dryRun']}"
         )
         try:
             launch_options: Dict[str, Any] = {"headless": headless}
@@ -501,6 +507,8 @@ class HandsFormLotteryExecutor:
                     timeout_ms,
                 )
                 if stage == "confirm":
+                    if values["dryRun"]:
+                        return self._dry_run_result(state, page, execution_id)
                     _submit_hands_form(page, confirm=True)
                     stage, state = _wait_for_page_stage(
                         page,
@@ -556,6 +564,29 @@ class HandsFormLotteryExecutor:
                     browser.close()
                 except Exception:
                     pass
+
+    def _dry_run_result(self, state: Dict[str, Any], page: Any, execution_id: str) -> Dict[str, Any]:
+        artifacts = _save_failure_artifacts(page, execution_id)
+        _log(f"[hands-form] DRY-RUN executionId={execution_id}, stage=confirm, finalSubmit=false")
+        return {
+            "success": False,
+            "status": "blocked",
+            "executionStatus": "blocked",
+            "paymentStatus": "not_required",
+            "errorCode": "HANDS_DRY_RUN_CONFIRM_READY",
+            "message": "Hands Dry-run 已到达最终确认页，未执行最终提交",
+            "requestUrl": state.get("url") or page.url,
+            "resultUrl": state.get("url") or page.url,
+            "rawResult": {
+                "source": "hands-form-playwright",
+                "stage": "confirm",
+                "dryRun": True,
+                "finalSubmit": False,
+                "url": state.get("url") or page.url,
+                "bodyText": _compact_text(state.get("bodyText"), 2000),
+                "artifacts": artifacts,
+            },
+        }
 
     def _failure_from_state(
         self,

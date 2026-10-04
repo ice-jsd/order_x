@@ -17,6 +17,11 @@ public class TicketPythonExecutorProperties {
     private boolean enabled = true;
 
     /**
+     * Hands Form 执行模式。python 使用服务器 Playwright，extension 回退到旧 Chrome 扩展。
+     */
+    private String handsFormExecutionMode = "python";
+
+    /**
      * Python HTTP 服务地址，用于页面解析、资料更新、批量注册/登录等请求。
      */
     private String baseUrl;

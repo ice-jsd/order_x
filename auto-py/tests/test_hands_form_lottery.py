@@ -1,7 +1,10 @@
 import json
+import os
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 AUTO_PY_DIR = Path(__file__).resolve().parents[1]
@@ -9,6 +12,7 @@ if str(AUTO_PY_DIR) not in sys.path:
     sys.path.insert(0, str(AUTO_PY_DIR))
 
 from hands_form_lottery import (  # noqa: E402
+    HandsFormLotteryExecutor,
     classify_hands_page,
     extract_hands_order_number,
     resolve_hands_execution_input,
@@ -37,6 +41,28 @@ class HandsFormLotteryTest(unittest.TestCase):
         self.assertEqual("ヤマダタロウ", result["furigana"])
         self.assertEqual("person@example.com", result["email"])
         self.assertEqual(2, result["quantity"])
+        self.assertFalse(result["dryRun"])
+
+    def test_dry_run_can_be_enabled_by_environment(self):
+        payload = {
+            "email": "person@example.com",
+            "accountInfo": json.dumps({"fullName": "山田太郎", "furigana": "ヤマダタロウ"}, ensure_ascii=False),
+            "taskOptions": json.dumps({"eventUrl": "https://event.hands.net/segment/123"}),
+        }
+        with patch.dict(os.environ, {"HANDS_FORM_DRY_RUN": "true"}):
+            result = resolve_hands_execution_input(payload)
+        self.assertTrue(result["dryRun"])
+
+    def test_global_dry_run_cannot_be_disabled_by_payload(self):
+        payload = {
+            "email": "person@example.com",
+            "handsFormDryRun": False,
+            "accountInfo": json.dumps({"fullName": "山田太郎", "furigana": "ヤマダタロウ"}, ensure_ascii=False),
+            "taskOptions": json.dumps({"eventUrl": "https://event.hands.net/segment/123"}),
+        }
+        with patch.dict(os.environ, {"HANDS_FORM_DRY_RUN": "true"}):
+            result = resolve_hands_execution_input(payload)
+        self.assertTrue(result["dryRun"])
 
     def test_classify_confirm_page(self):
         state = {
@@ -67,6 +93,17 @@ class HandsFormLotteryTest(unittest.TestCase):
 
     def test_extract_order_number(self):
         self.assertEqual("12345678", extract_hands_order_number("受付番号：12345678"))
+
+    def test_dry_run_result_is_blocked_without_final_submission(self):
+        executor = HandsFormLotteryExecutor()
+        state = {"url": "https://event.hands.net/process", "bodyText": "確認内容"}
+        with patch("hands_form_lottery._save_failure_artifacts", return_value={"screenshot": "confirm.png"}):
+            result = executor._dry_run_result(state, SimpleNamespace(url=state["url"]), "execution-1")
+
+        self.assertFalse(result["success"])
+        self.assertEqual("blocked", result["executionStatus"])
+        self.assertEqual("HANDS_DRY_RUN_CONFIRM_READY", result["errorCode"])
+        self.assertFalse(result["rawResult"]["finalSubmit"])
 
 
 if __name__ == "__main__":

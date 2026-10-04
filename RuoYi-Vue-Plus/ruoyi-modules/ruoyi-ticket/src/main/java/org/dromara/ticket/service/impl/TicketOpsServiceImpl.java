@@ -135,6 +135,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
         new NamePair("葵", "アオイ")
     );
     private static final List<String> LIVEPOCKET_LOTTERY_TICKETS_URL_KEYS = List.of("ticketEntryUrl", "ticketsUrl", "lotteryTicketsUrl", "lotteryEntryUrl");
+    private static final String HANDS_EXTENSION_WAITING_MESSAGE = "等待 Hands Chrome 扩展领取";
     private static final int AUDIT_BUSINESS_KEY_MAX_LENGTH = 128;
     private static final int AUDIT_MESSAGE_MAX_LENGTH = 500;
     private static final int LAST_ERROR_MAX_LENGTH = 500;
@@ -3447,6 +3448,11 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
         return matchesPlatformCode(platform, HANDS_FORM_PLATFORM_CODE);
     }
 
+    private boolean useHandsFormExtension(TicketPlatformConfig platform) {
+        return isHandsFormPlatform(platform)
+            && "extension".equalsIgnoreCase(StringUtils.trim(ticketPythonExecutorProperties.getHandsFormExecutionMode()));
+    }
+
     private String resolvePlatformAdapterType(String platformCode, String currentAdapterType) {
         String normalizedCode = StringUtils.defaultIfBlank(platformCode, "").trim();
         String normalizedAdapterType = StringUtils.defaultIfBlank(currentAdapterType, "").trim();
@@ -4663,6 +4669,10 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
         }
         TicketSaleTask task = execution == null ? null : saleTaskMapper.selectById(execution.getTaskId());
         TicketPlatformConfig platform = execution == null ? null : platformMapper.selectById(execution.getPlatformId());
+        if (task != null && platform != null && useHandsFormExtension(platform)) {
+            prepareHandsFormExtensionExecution(executionId);
+            return;
+        }
         TicketManagedAccount account = execution == null ? null : accountMapper.selectById(execution.getAccountId());
         TicketSaleTaskSchedule schedule = execution == null ? null : saleTaskScheduleMapper.selectById(execution.getLotteryScheduleId());
         if (task == null || platform == null || account == null) {
@@ -5008,6 +5018,10 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
                 markLotteryExecutionFailed(execution.getExecutionId(), "抽票账号不存在", null);
                 continue;
             }
+            if (useHandsFormExtension(platform)) {
+                prepareHandsFormExtensionExecution(execution.getExecutionId());
+                continue;
+            }
             enqueueLotteryExecution(task, schedule, platform, execution, account);
         }
         log.info("lottery schedule dispatched, scheduleId={}, taskId={}, platformCode={}, executions={}",
@@ -5044,6 +5058,17 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
             log.error("enqueue lottery execution failed, executionId={}", execution.getExecutionId(), ex);
             markLotteryExecutionFailed(execution.getExecutionId(), "Python 抽票任务入队失败: " + StringUtils.defaultString(ex.getMessage(), "unknown"), ex);
         }
+    }
+
+    private void prepareHandsFormExtensionExecution(Long executionId) {
+        orderExecutionMapper.update(null, Wrappers.lambdaUpdate(TicketOrderExecution.class)
+            .eq(TicketOrderExecution::getExecutionId, executionId)
+            .eq(TicketOrderExecution::getExecutionStatus, "queued")
+            .set(TicketOrderExecution::getCurrentStep, "LOTTERY_ENTRY")
+            .set(TicketOrderExecution::getStepStatus, "pending")
+            .set(TicketOrderExecution::getWorkerId, null)
+            .set(TicketOrderExecution::getHeartbeatAt, new Date())
+            .set(TicketOrderExecution::getResultMessage, HANDS_EXTENSION_WAITING_MESSAGE));
     }
 
     private void writeLotteryExecutionJob(TicketSaleTask task, TicketSaleTaskSchedule schedule,
@@ -6164,6 +6189,11 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
                 markLotteryExecutionFailed(execution.getExecutionId(), account == null ? "抽票账号不存在" : "抽票时段不存在", null);
                 continue;
             }
+            if (useHandsFormExtension(platform)) {
+                prepareHandsFormExtensionExecution(execution.getExecutionId());
+                touchedScheduleIds.add(schedule.getScheduleId());
+                continue;
+            }
             enqueueLotteryExecution(task, schedule, platform, execution, account);
             touchedScheduleIds.add(schedule.getScheduleId());
         }
@@ -6218,10 +6248,23 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
         }
         long dispatchAt = forceImmediate ? 0L : (schedule.getScheduledTime() == null ? 0L : schedule.getScheduledTime().getTime());
         Date now = new Date();
+        boolean handsExtensionMode = useHandsFormExtension(platform);
         for (TicketOrderExecution execution : executions) {
             TicketManagedAccount account = accountMapper.selectById(execution.getAccountId());
             if (account == null) {
                 markLotteryExecutionFailed(execution.getExecutionId(), "抽票账号不存在", null);
+                continue;
+            }
+            if (handsExtensionMode) {
+                if (dispatchAt > System.currentTimeMillis()) {
+                    ticketPythonStringRedisTemplate.opsForZSet().add(
+                        ticketPythonExecutorProperties.getDelayedZsetKey(),
+                        String.valueOf(execution.getExecutionId()),
+                        dispatchAt
+                    );
+                } else {
+                    prepareHandsFormExtensionExecution(execution.getExecutionId());
+                }
                 continue;
             }
             writeLotteryExecutionJob(task, schedule, platform, execution, account);
@@ -6236,12 +6279,15 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
             .eq(TicketSaleTaskSchedule::getScheduleStatus, "pending")
             .set(
                 TicketSaleTaskSchedule::getResultMessage,
-                forceImmediate ? "立即执行，已写入 Python 抽票队列" : (dispatchAt > System.currentTimeMillis() ? "等待 Python 抽票队列调度" : "已写入 Python 抽票队列")
+                handsExtensionMode
+                    ? (dispatchAt > System.currentTimeMillis() ? "等待 Hands 扩展执行时间" : HANDS_EXTENSION_WAITING_MESSAGE)
+                    : (forceImmediate ? "立即执行，已写入 Python 抽票队列" : (dispatchAt > System.currentTimeMillis() ? "等待 Python 抽票队列调度" : "已写入 Python 抽票队列"))
             )
             .set(dispatchAt <= System.currentTimeMillis(), TicketSaleTaskSchedule::getDispatchedTime, now));
         log.info(
-            "lottery schedule queued, taskId={}, scheduleId={}, executions={}, dispatchAt={}, forceImmediate={}",
-            taskId, schedule.getScheduleId(), executions.size(), dispatchAt, forceImmediate
+            "lottery schedule queued, taskId={}, scheduleId={}, executions={}, dispatchAt={}, forceImmediate={}, handsExecutionMode={}",
+            taskId, schedule.getScheduleId(), executions.size(), dispatchAt, forceImmediate,
+            handsExtensionMode ? "extension" : "python"
         );
     }
 
