@@ -272,7 +272,7 @@ websocket:
       auto-warmup-lead-ms: 3000
     python-executor:
       enabled: true
-      hands-form-execution-mode: ${HANDS_FORM_EXECUTION_MODE:python}
+      hands-form-execution-mode: ${HANDS_FORM_EXECUTION_MODE:extension}
       base-url: "http://127.0.0.1:8098"
       backend-base-url: "http://127.0.0.1:8080/ticket/external/account"
       profile-timeout-ms: 900000
@@ -304,6 +304,7 @@ websocket:
       event-parse-result-last-id-key: "ticket:lottery:event-parse:result:last-id"
       event-parse-job-ttl-seconds: 3600
       delayed-promote-batch-size: 100
+      delayed-promote-retry-delay-ms: 5000
       queue-consume-batch-size: 50
       delayed-poll-interval-ms: 1000
       queue-poll-interval-ms: 1000

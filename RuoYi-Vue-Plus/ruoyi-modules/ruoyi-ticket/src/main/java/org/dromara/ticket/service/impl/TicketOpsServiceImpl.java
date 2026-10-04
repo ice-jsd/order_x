@@ -26,6 +26,7 @@ import org.dromara.common.sse.dto.SseMessageDto;
 import org.dromara.common.sse.utils.SseMessageUtils;
 import org.dromara.common.tenant.helper.TenantHelper;
 import org.dromara.ticket.adapter.*;
+import org.dromara.ticket.config.TicketHandsFormExtensionProperties;
 import org.dromara.ticket.config.TicketPythonExecutorProperties;
 import org.dromara.ticket.config.TicketOrderExecutorProperties;
 import org.dromara.ticket.config.TicketStalwartProperties;
@@ -168,6 +169,7 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
     private final TicketOrderExecutorProperties ticketOrderExecutorProperties;
     private final TicketPythonExecutorClient ticketPythonExecutorClient;
     private final TicketPythonExecutorProperties ticketPythonExecutorProperties;
+    private final TicketHandsFormExtensionProperties ticketHandsFormExtensionProperties;
     private final TicketStalwartProperties ticketStalwartProperties;
     private final TicketMailReaderService ticketMailReaderService;
     private final TicketLotteryResultMailService lotteryResultMailService;
@@ -5061,6 +5063,12 @@ public class TicketOpsServiceImpl implements ITicketOpsService, TicketPythonQueu
     }
 
     private void prepareHandsFormExtensionExecution(Long executionId) {
+        if (!ticketHandsFormExtensionProperties.isEnabled()) {
+            String message = "Hands 执行模式为 extension，但扩展接口未启用；请同时设置 HANDS_FORM_EXTENSION_ENABLED=true";
+            log.error("hands extension execution blocked by invalid configuration, executionId={}", executionId);
+            markLotteryExecutionFailed(executionId, message, null);
+            return;
+        }
         orderExecutionMapper.update(null, Wrappers.lambdaUpdate(TicketOrderExecution.class)
             .eq(TicketOrderExecution::getExecutionId, executionId)
             .eq(TicketOrderExecution::getExecutionStatus, "queued")

@@ -49,17 +49,52 @@ public class TicketPythonQueueWorker {
                 return;
             }
             for (String executionId : executionIds) {
-                Long removed = ticketPythonStringRedisTemplate.opsForZSet().remove(ticketPythonExecutorProperties.getDelayedZsetKey(), executionId);
-                if (removed == null || removed <= 0) {
-                    continue;
-                }
-                Long id = Convert.toLong(executionId, null);
-                if (id != null) {
-                    queueHandler.promoteLotteryExecution(id);
-                }
+                promoteDueLotteryExecution(executionId);
             }
         } catch (Exception ex) {
             log.error("promote due lottery schedules failed", ex);
+        }
+    }
+
+    private void promoteDueLotteryExecution(String executionId) {
+        Long id = Convert.toLong(executionId, null);
+        if (id == null) {
+            ticketPythonStringRedisTemplate.opsForZSet().remove(ticketPythonExecutorProperties.getDelayedZsetKey(), executionId);
+            log.warn("invalid lottery delayed execution id removed, executionId={}", executionId);
+            return;
+        }
+        Long removed = ticketPythonStringRedisTemplate.opsForZSet().remove(
+            ticketPythonExecutorProperties.getDelayedZsetKey(),
+            executionId
+        );
+        if (removed == null || removed <= 0) {
+            return;
+        }
+        try {
+            queueHandler.promoteLotteryExecution(id);
+        } catch (Exception ex) {
+            long retryDelayMs = Math.max(ticketPythonExecutorProperties.getDelayedPromoteRetryDelayMs(), 1000);
+            long retryAt = System.currentTimeMillis() + retryDelayMs;
+            try {
+                ticketPythonStringRedisTemplate.opsForZSet().add(
+                    ticketPythonExecutorProperties.getDelayedZsetKey(),
+                    executionId,
+                    retryAt
+                );
+                log.error(
+                    "promote lottery delayed execution failed and requeued, executionId={}, retryAt={}",
+                    executionId,
+                    retryAt,
+                    ex
+                );
+            } catch (Exception requeueEx) {
+                ex.addSuppressed(requeueEx);
+                log.error(
+                    "promote lottery delayed execution failed and requeue also failed, executionId={}",
+                    executionId,
+                    ex
+                );
+            }
         }
     }
 

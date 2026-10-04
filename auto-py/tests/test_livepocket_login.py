@@ -28,6 +28,31 @@ TURNSTILE_HTML = """
 
 
 class CapSolverTurnstileTests(unittest.TestCase):
+    def test_solve_enterprise_v3_high_score_uses_m1_task(self):
+        solver = CapSolverCaptchaVerifier("test-key", poll_interval_seconds=0)
+        solver._submit_task = Mock(return_value="task-m1")
+        solver._poll_task_result = Mock(return_value="enterprise-token")
+
+        token = solver.solve_recaptcha_v3_enterprise(
+            "site-key",
+            "https://event.hands.net/segment/123",
+            page_action="submit",
+            high_score=True,
+            user_agent="test-user-agent",
+        )
+
+        self.assertEqual(token, "enterprise-token")
+        solver._submit_task.assert_called_once_with(
+            {
+                "type": "ReCaptchaV3EnterpriseM1TaskProxyLess",
+                "websiteURL": "https://event.hands.net/segment/123",
+                "websiteKey": "site-key",
+                "pageAction": "submit",
+                "userAgent": "test-user-agent",
+            },
+            submit_error_label="提交验证码失败",
+        )
+
     def test_solve_turnstile_uses_expected_task_and_token_field(self):
         solver = CapSolverCaptchaVerifier("test-key", poll_interval_seconds=0)
         solver._submit_task = Mock(return_value="task-1")

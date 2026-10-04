@@ -15,6 +15,7 @@ from hands_form_lottery import (  # noqa: E402
     HandsFormLotteryExecutor,
     classify_hands_page,
     extract_hands_order_number,
+    extract_hands_recaptcha_config,
     resolve_hands_execution_input,
 )
 
@@ -41,7 +42,7 @@ class HandsFormLotteryTest(unittest.TestCase):
         self.assertEqual("ヤマダタロウ", result["furigana"])
         self.assertEqual("person@example.com", result["email"])
         self.assertEqual(2, result["quantity"])
-        self.assertFalse(result["dryRun"])
+        self.assertTrue(result["dryRun"])
 
     def test_dry_run_can_be_enabled_by_environment(self):
         payload = {
@@ -94,6 +95,19 @@ class HandsFormLotteryTest(unittest.TestCase):
     def test_extract_order_number(self):
         self.assertEqual("12345678", extract_hands_order_number("受付番号：12345678"))
 
+    def test_extract_enterprise_recaptcha_config(self):
+        page_text = """
+        <script src="https://www.google.com/recaptcha/enterprise.js?render=site-key-123"></script>
+        <script>
+          grecaptcha.enterprise.execute("site-key-123", {action: 'submit'}).then(() => {});
+        </script>
+        """
+
+        self.assertEqual(
+            {"siteKey": "site-key-123", "action": "submit"},
+            extract_hands_recaptcha_config(page_text),
+        )
+
     def test_dry_run_result_is_blocked_without_final_submission(self):
         executor = HandsFormLotteryExecutor()
         state = {"url": "https://event.hands.net/process", "bodyText": "確認内容"}
@@ -104,6 +118,24 @@ class HandsFormLotteryTest(unittest.TestCase):
         self.assertEqual("blocked", result["executionStatus"])
         self.assertEqual("HANDS_DRY_RUN_CONFIRM_READY", result["errorCode"])
         self.assertFalse(result["rawResult"]["finalSubmit"])
+
+    def test_recaptcha_rejection_has_specific_error_code(self):
+        executor = HandsFormLotteryExecutor()
+        state = {
+            "url": "https://event.hands.net/segment/123",
+            "bodyText": "Google reCAPTCHAの認証に失敗しました。",
+        }
+        with patch("hands_form_lottery._save_failure_artifacts", return_value={}):
+            result = executor._failure_from_state(
+                "Hands 页面校验失败",
+                "failed",
+                state,
+                SimpleNamespace(url=state["url"]),
+                "execution-1",
+            )
+
+        self.assertEqual("failed", result["executionStatus"])
+        self.assertEqual("HANDS_RECAPTCHA_REJECTED", result["errorCode"])
 
 
 if __name__ == "__main__":

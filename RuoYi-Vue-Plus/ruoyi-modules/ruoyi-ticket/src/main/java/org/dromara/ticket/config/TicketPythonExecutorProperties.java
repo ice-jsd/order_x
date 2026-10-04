@@ -19,7 +19,7 @@ public class TicketPythonExecutorProperties {
     /**
      * Hands Form 执行模式。python 使用服务器 Playwright，extension 回退到旧 Chrome 扩展。
      */
-    private String handsFormExecutionMode = "python";
+    private String handsFormExecutionMode = "extension";
 
     /**
      * Python HTTP 服务地址，用于页面解析、资料更新、批量注册/登录等请求。
@@ -165,6 +165,11 @@ public class TicketPythonExecutorProperties {
      * 每轮最多从 delayed 推进到 ready 的时段数。
      */
     private int delayedPromoteBatchSize = 100;
+
+    /**
+     * delayed 推进失败后的重试延迟(ms)。
+     */
+    private int delayedPromoteRetryDelayMs = 5000;
 
     /**
      * 每轮最多消费的 Python result 事件数。

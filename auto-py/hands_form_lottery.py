@@ -9,6 +9,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import requests
 
+from capsolver_captcha import CaptchaSolver, capsolver_api_key
 from ticket_runtime import bool_value, env_text, get_logger
 from livepocket_proxy import apply_proxy_to_session, get_proxy, mark_proxy_failed, proxy_max_attempts
 
@@ -33,6 +34,14 @@ ORDER_NUMBER_PATTERNS = (
     re.compile(r"申込番号[:：]?\s*([0-9]{4,})"),
 )
 DEFAULT_BROWSER_TIMEOUT_MS = 90000
+RECAPTCHA_ENTERPRISE_SCRIPT_PATTERN = re.compile(
+    r"recaptcha/enterprise\.js\?[^\"'<>]*render=([A-Za-z0-9_-]+)",
+    flags=re.I,
+)
+RECAPTCHA_ENTERPRISE_EXECUTE_PATTERN = re.compile(
+    r"grecaptcha\.enterprise\.execute\(\s*[\"']([^\"']+)[\"']\s*,\s*\{\s*action\s*:\s*[\"']([^\"']+)[\"']",
+    flags=re.I | re.S,
+)
 
 DEFAULT_HEADERS = {
     "User-Agent": (
@@ -83,6 +92,20 @@ def extract_hands_order_number(page_text: str) -> str:
     return ""
 
 
+def extract_hands_recaptcha_config(page_text: str) -> Dict[str, str]:
+    source = html.unescape(page_text or "")
+    execute_match = RECAPTCHA_ENTERPRISE_EXECUTE_PATTERN.search(source)
+    script_match = RECAPTCHA_ENTERPRISE_SCRIPT_PATTERN.search(source)
+    return {
+        "siteKey": (
+            execute_match.group(1)
+            if execute_match
+            else (script_match.group(1) if script_match else "")
+        ),
+        "action": execute_match.group(2) if execute_match else "submit",
+    }
+
+
 def classify_hands_page(state: Dict[str, Any]) -> str:
     body_text = str(state.get("bodyText") or "")
     if extract_hands_order_number(body_text) or any(marker in body_text for marker in SUCCESS_MARKERS):
@@ -115,7 +138,7 @@ def resolve_hands_execution_input(payload: Dict[str, Any]) -> Dict[str, Any]:
     except (TypeError, ValueError):
         quantity = 1
     dry_run = (
-        bool_value(env_text("HANDS_FORM_DRY_RUN", "false"))
+        bool_value(env_text("HANDS_FORM_DRY_RUN", "true"))
         or bool_value(task_options.get("handsFormDryRun"))
         or bool_value(payload.get("handsFormDryRun"))
     )
@@ -251,6 +274,63 @@ def _fill_hands_entry_form(page: Any, values: Dict[str, Any]) -> None:
         )
 
 
+def _apply_hands_recaptcha_token(page: Any, token: str) -> None:
+    page.evaluate(
+        """
+        ({ token }) => {
+          const updateField = (element) => {
+            element.value = token;
+            element.innerHTML = token;
+            element.textContent = token;
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+          };
+          document.querySelectorAll(
+            'textarea[name="g-recaptcha-response"], input[name="g-recaptcha-response"]'
+          ).forEach(updateField);
+          const target = window.grecaptcha || {};
+          target.enterprise = target.enterprise || {};
+          window.__handsRecaptchaPatched = true;
+          window.__handsRecaptchaTokenLength = String(token || '').length;
+          target.enterprise.execute = async () => token;
+          window.grecaptcha = target;
+        }
+        """,
+        {"token": token},
+    )
+
+
+def _solve_hands_recaptcha(page: Any, page_url: str) -> None:
+    config = extract_hands_recaptcha_config(page.content())
+    site_key = config["siteKey"]
+    if not site_key:
+        return
+    provider = env_text("HANDS_FORM_CAPTCHA_PROVIDER", "capsolver").strip().lower()
+    if provider == "browser":
+        _log("[hands-form] using browser-generated reCAPTCHA token")
+        return
+    if provider != "capsolver":
+        raise RuntimeError(f"Hands 验证码提供方不支持: {provider}")
+    api_key = capsolver_api_key()
+    if not api_key:
+        raise RuntimeError("Hands 检测到 reCAPTCHA Enterprise，但缺少 CAPSOLVER_API_KEY")
+    action = config["action"] or "submit"
+    high_score = bool_value(env_text("HANDS_FORM_CAPTCHA_HIGH_SCORE", "false"))
+    _log(
+        f"[hands-form] solving reCAPTCHA v3 Enterprise, action={action}, "
+        f"highScore={high_score}"
+    )
+    token = CaptchaSolver(api_key=api_key).solve_recaptcha_v3_enterprise(
+        site_key,
+        page_url,
+        page_action=action,
+        high_score=high_score,
+        user_agent=DEFAULT_HEADERS["User-Agent"],
+    )
+    _apply_hands_recaptcha_token(page, token)
+    _log(f"[hands-form] reCAPTCHA token ready, tokenLength={len(token)}")
+
+
 def _submit_hands_form(page: Any, *, confirm: bool) -> None:
     selectors = (
         (
@@ -370,10 +450,15 @@ def fetch_hands_event_info(event_url: str, session: Optional[requests.Session] =
     proxy_key = f"hands-event-info:{normalized_url}"
     response: Optional[requests.Response] = None
     last_error: Optional[Exception] = None
-    max_attempts = proxy_max_attempts()
+    proxy_enabled = bool_value(env_text("HANDS_FORM_PROXY_ENABLED", "false"))
+    max_attempts = max(proxy_max_attempts(), 1) if proxy_enabled else 1
 
     for attempt in range(1, max_attempts + 1):
-        proxy = get_proxy(proxy_key, refresh=attempt > 1, platform_code="hands-form")
+        proxy = (
+            get_proxy(proxy_key, refresh=attempt > 1, platform_code="hands-form")
+            if proxy_enabled
+            else None
+        )
         apply_proxy_to_session(client, proxy)
         try:
             response = client.get(normalized_url, timeout=30)
@@ -456,114 +541,147 @@ class HandsFormLotteryExecutor:
         timeout_ms = max(_env_int("HANDS_FORM_BROWSER_TIMEOUT_MS", DEFAULT_BROWSER_TIMEOUT_MS), 10000)
         headless = bool_value(env_text("HANDS_FORM_BROWSER_HEADLESS", "true"))
         proxy_key = f"hands-form:{payload.get('accountId') or values['email']}"
-        proxy = get_proxy(proxy_key, platform_code="hands-form")
-        browser = None
-        context = None
-        page = None
-        submitted = False
-        _log(
-            f"[hands-form] START executionId={execution_id}, accountId={payload.get('accountId')}, "
-            f"proxy={proxy.masked() if proxy else '-'}, headless={headless}, dryRun={values['dryRun']}"
-        )
+        proxy_enabled = bool_value(env_text("HANDS_FORM_PROXY_ENABLED", "false"))
+        max_attempts = max(proxy_max_attempts(), 1) if proxy_enabled else 1
+        last_error: Optional[Exception] = None
         try:
-            launch_options: Dict[str, Any] = {"headless": headless}
-            browser_path = _browser_executable_path()
-            if browser_path:
-                launch_options["executable_path"] = browser_path
-            if proxy:
-                launch_options["proxy"] = proxy.playwright_proxy()
-
             with sync_playwright() as playwright:
-                browser = playwright.chromium.launch(**launch_options)
-                context = browser.new_context(
-                    user_agent=DEFAULT_HEADERS["User-Agent"],
-                    locale="ja-JP",
-                    timezone_id="Asia/Tokyo",
-                    viewport={"width": 1365, "height": 900},
-                    extra_http_headers={"Accept-Language": DEFAULT_HEADERS["Accept-Language"]},
-                )
-                page = context.new_page()
-                page.set_default_timeout(timeout_ms)
-                response = page.goto(values["eventUrl"], wait_until="domcontentloaded", timeout=timeout_ms)
-                page.wait_for_timeout(1000)
-                initial_state = _read_browser_state(page)
-                initial_stage = classify_hands_page(initial_state)
-                if initial_stage != "entry":
-                    return self._failure_from_state(
-                        f"Hands 页面未进入填写页: {initial_stage}",
-                        initial_stage,
-                        initial_state,
-                        page,
-                        execution_id,
-                        http_status=response.status if response else None,
-                    )
+                for attempt in range(1, max_attempts + 1):
+                    proxy = None
+                    browser = None
+                    context = None
+                    page = None
+                    submitted = False
+                    try:
+                        proxy = (
+                            get_proxy(proxy_key, refresh=attempt > 1, platform_code="hands-form")
+                            if proxy_enabled
+                            else None
+                        )
+                        launch_options: Dict[str, Any] = {"headless": headless}
+                        launch_options["args"] = ["--disable-blink-features=AutomationControlled"]
+                        browser_path = _browser_executable_path()
+                        if browser_path:
+                            launch_options["executable_path"] = browser_path
+                        if proxy:
+                            launch_options["proxy"] = proxy.playwright_proxy()
 
-                _fill_hands_entry_form(page, values)
-                _submit_hands_form(page, confirm=False)
-                submitted = True
-                stage, state = _wait_for_page_stage(
-                    page,
-                    ("confirm", "success", "failed", "captcha_required"),
-                    timeout_ms,
-                )
-                if stage == "confirm":
-                    if values["dryRun"]:
-                        return self._dry_run_result(state, page, execution_id)
-                    _submit_hands_form(page, confirm=True)
-                    stage, state = _wait_for_page_stage(
-                        page,
-                        ("success", "failed", "captcha_required", "entry"),
-                        timeout_ms,
-                    )
+                        _log(
+                            f"[hands-form] START executionId={execution_id}, accountId={payload.get('accountId')}, "
+                            f"attempt={attempt}/{max_attempts}, proxy={proxy.masked() if proxy else '-'}, "
+                            f"headless={headless}, dryRun={values['dryRun']}"
+                        )
+                        browser = playwright.chromium.launch(**launch_options)
+                        context = browser.new_context(
+                            user_agent=DEFAULT_HEADERS["User-Agent"],
+                            locale="ja-JP",
+                            timezone_id="Asia/Tokyo",
+                            viewport={"width": 1365, "height": 900},
+                            extra_http_headers={"Accept-Language": DEFAULT_HEADERS["Accept-Language"]},
+                        )
+                        context.add_init_script(
+                            "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+                        )
+                        page = context.new_page()
+                        page.set_default_timeout(timeout_ms)
+                        response = page.goto(values["eventUrl"], wait_until="domcontentloaded", timeout=timeout_ms)
+                        page.wait_for_timeout(1000)
+                        initial_state = _read_browser_state(page)
+                        initial_stage = classify_hands_page(initial_state)
+                        if initial_stage != "entry":
+                            return self._failure_from_state(
+                                f"Hands 页面未进入填写页: {initial_stage}",
+                                initial_stage,
+                                initial_state,
+                                page,
+                                execution_id,
+                                http_status=response.status if response else None,
+                            )
 
-                if stage == "success":
-                    body_text = str(state.get("bodyText") or "")
-                    order_id = extract_hands_order_number(body_text)
-                    _log(f"[hands-form] DONE executionId={execution_id}, orderId={order_id or '-'}")
-                    return {
-                        "success": True,
-                        "status": "submitted",
-                        "executionStatus": "submitted",
-                        "paymentStatus": "not_required",
-                        "message": f"Hands 表单提交成功，受付番号 {order_id}" if order_id else "Hands 表单提交成功",
-                        "orderId": order_id,
-                        "requestUrl": values["eventUrl"],
-                        "resultUrl": state.get("url") or page.url,
-                        "rawResult": {
-                            "source": "hands-form-playwright",
-                            "stage": stage,
-                            "url": state.get("url") or page.url,
-                            "bodyText": _compact_text(body_text, 1200),
-                        },
-                    }
+                        _fill_hands_entry_form(page, values)
+                        _solve_hands_recaptcha(page, values["eventUrl"])
+                        _submit_hands_form(page, confirm=False)
+                        submitted = True
+                        stage, state = _wait_for_page_stage(
+                            page,
+                            ("confirm", "success", "failed", "captcha_required"),
+                            timeout_ms,
+                        )
+                        if stage == "confirm":
+                            if values["dryRun"]:
+                                return self._dry_run_result(state, page, execution_id)
+                            _submit_hands_form(page, confirm=True)
+                            stage, state = _wait_for_page_stage(
+                                page,
+                                ("success", "failed", "captcha_required", "entry"),
+                                timeout_ms,
+                            )
 
-                message = {
-                    "failed": "Hands 页面校验失败，未完成提交",
-                    "captcha_required": "Hands 出现交互式 reCAPTCHA，需要人工处理或验证码服务",
-                    "entry": "Hands 确认提交后返回填写页，可能存在字段校验错误",
-                }.get(stage, f"Hands 表单提交后页面状态未识别: {stage}")
-                return self._failure_from_state(message, stage, state, page, execution_id)
+                        if stage == "success":
+                            body_text = str(state.get("bodyText") or "")
+                            order_id = extract_hands_order_number(body_text)
+                            _log(f"[hands-form] DONE executionId={execution_id}, orderId={order_id or '-'}")
+                            return {
+                                "success": True,
+                                "status": "submitted",
+                                "executionStatus": "submitted",
+                                "paymentStatus": "not_required",
+                                "message": f"Hands 表单提交成功，受付番号 {order_id}" if order_id else "Hands 表单提交成功",
+                                "orderId": order_id,
+                                "requestUrl": values["eventUrl"],
+                                "resultUrl": state.get("url") or page.url,
+                                "rawResult": {
+                                    "source": "hands-form-playwright",
+                                    "stage": stage,
+                                    "url": state.get("url") or page.url,
+                                    "bodyText": _compact_text(body_text, 1200),
+                                },
+                            }
+
+                        message = {
+                            "failed": "Hands 页面校验失败，未完成提交",
+                            "captcha_required": "Hands 出现交互式 reCAPTCHA，需要人工处理或验证码服务",
+                            "entry": "Hands 确认提交后返回填写页，可能存在字段校验错误",
+                        }.get(stage, f"Hands 表单提交后页面状态未识别: {stage}")
+                        return self._failure_from_state(message, stage, state, page, execution_id)
+                    except Exception as exc:
+                        last_error = exc
+                        artifacts = _save_failure_artifacts(page, execution_id) if page is not None else {}
+                        if proxy and not submitted:
+                            mark_proxy_failed(
+                                proxy,
+                                reason=f"Hands 浏览器执行异常: {exc}",
+                                key=proxy_key,
+                                platform_code="hands-form",
+                            )
+                            if attempt < max_attempts:
+                                _log(f"[hands-form] 浏览器代理重试 {attempt}/{max_attempts}: {exc}")
+                                continue
+                        return self.fail(
+                            f"Hands 浏览器执行异常: {exc}",
+                            request_url=values["eventUrl"],
+                            result_url=str(getattr(page, "url", "") or ""),
+                            raw_result={"source": "hands-form-playwright", "artifacts": artifacts},
+                        )
+                    finally:
+                        if context is not None:
+                            try:
+                                context.close()
+                            except Exception:
+                                pass
+                        if browser is not None:
+                            try:
+                                browser.close()
+                            except Exception:
+                                pass
         except Exception as exc:
-            if proxy and not submitted:
-                mark_proxy_failed(proxy, reason=f"Hands 浏览器执行异常: {exc}", key=proxy_key, platform_code="hands-form")
-            artifacts = _save_failure_artifacts(page, execution_id) if page is not None else {}
+            last_error = exc
             return self.fail(
                 f"Hands 浏览器执行异常: {exc}",
                 request_url=values["eventUrl"],
-                result_url=str(getattr(page, "url", "") or ""),
-                raw_result={"source": "hands-form-playwright", "artifacts": artifacts},
+                raw_result={"source": "hands-form-playwright", "artifacts": {}},
             )
-        finally:
-            if context is not None:
-                try:
-                    context.close()
-                except Exception:
-                    pass
-            if browser is not None:
-                try:
-                    browser.close()
-                except Exception:
-                    pass
+        return self.fail(f"Hands 浏览器执行异常: {last_error or 'unknown'}", request_url=values["eventUrl"])
 
     def _dry_run_result(self, state: Dict[str, Any], page: Any, execution_id: str) -> Dict[str, Any]:
         artifacts = _save_failure_artifacts(page, execution_id)
@@ -598,11 +716,14 @@ class HandsFormLotteryExecutor:
         http_status: Optional[int] = None,
     ) -> Dict[str, Any]:
         artifacts = _save_failure_artifacts(page, execution_id)
+        body_text = str(state.get("bodyText") or "")
+        captcha_rejected = any(marker in body_text for marker in FAILURE_MARKERS)
         return self.fail(
-            message,
+            "Hands reCAPTCHA 校验失败，未进入确认页" if captcha_rejected else message,
             http_status=http_status,
             request_url=str(state.get("url") or ""),
             result_url=str(state.get("url") or ""),
+            error_code="HANDS_RECAPTCHA_REJECTED" if captcha_rejected else "",
             raw_result={
                 "source": "hands-form-playwright",
                 "stage": stage,
@@ -619,9 +740,10 @@ class HandsFormLotteryExecutor:
         http_status: Optional[int] = None,
         request_url: str = "",
         result_url: str = "",
+        error_code: str = "",
         raw_result: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        return {
+        result = {
             "success": False,
             "status": "failed",
             "executionStatus": "failed",
@@ -632,3 +754,6 @@ class HandsFormLotteryExecutor:
             "resultUrl": result_url,
             "rawResult": raw_result or {"source": "hands-form-playwright"},
         }
+        if error_code:
+            result["errorCode"] = error_code
+        return result

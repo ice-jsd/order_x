@@ -88,11 +88,14 @@ Python 每个账号发布一条 `account_result`，批次结束发布 `batch_com
 - `LOTTERY_WORKERS`：抽票 Worker 数。
 - `LOTTERY_EVENT_PARSE_WORKERS`：活动解析 Worker 数。
 - `LOTTERY_DELAYED_PROMOTER_ENABLED`：是否由 Python 推进延时抽票队列，默认 `false`，生产环境由 Java 单点推进。
+- `HANDS_FORM_PROXY_ENABLED`：Hands 是否复用动态代理，默认 `false`。Hands 与 LivePocket 的代理兼容性不同，灰度验证通过前保持直连。
+- `HANDS_FORM_CAPTCHA_PROVIDER`：Hands reCAPTCHA token 来源，可选 `capsolver` 或 `browser`，默认 `capsolver`。
+- `HANDS_FORM_CAPTCHA_HIGH_SCORE`：Hands reCAPTCHA v3 Enterprise 是否使用 CapSolver M1 高分任务，默认 `false`；仅影响 Hands，单价高于标准任务，需供应商完成站点适配后再开启。
 - `HANDS_FORM_BROWSER_HEADLESS`：Hands 是否使用无头浏览器，服务器默认 `true`。
 - `HANDS_FORM_BROWSER_PATH`：可选的 Chrome/Chromium 可执行文件路径。
 - `HANDS_FORM_BROWSER_TIMEOUT_MS`：Hands 单个页面阶段超时，默认 `90000`。
 - `HANDS_FORM_FAILURE_ARTIFACTS_ENABLED`：失败时在 `.runtime/hands-form` 保存页面和截图，默认 `true`。
-- `HANDS_FORM_DRY_RUN`：设为 `true` 时只执行到最终确认页并保存现场，不点击最终提交。
+- `HANDS_FORM_DRY_RUN`：默认 `true`，只执行到最终确认页并保存现场，不点击最终提交；完成真实 dry-run 验证后才可显式设为 `false`。
 
 LivePocket 动态代理：
 

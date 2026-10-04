@@ -135,20 +135,23 @@ vi .env.local
 CAPSOLVER_API_KEY=真实值
 LOTTERY_REDIS_PASSWORD=真实值
 LOTTERY_DELAYED_PROMOTER_ENABLED=false
+HANDS_FORM_PROXY_ENABLED=false
+HANDS_FORM_CAPTCHA_PROVIDER=capsolver
+HANDS_FORM_CAPTCHA_HIGH_SCORE=false
 HANDS_FORM_DRY_RUN=true
 ```
 
-首次灰度时保持 `HANDS_FORM_DRY_RUN=true`，只验证填写页到最终确认页，不会点击最终提交。确认执行结果包含 `HANDS_DRY_RUN_CONFIRM_READY`，并检查 `/opt/orderx/auto-py/.runtime/hands-form` 的截图和 HTML 后，再改为 `false`。
+首次灰度时保持 `HANDS_FORM_DRY_RUN=true`，只验证填写页到最终确认页，不会点击最终提交。Hands 当前使用 reCAPTCHA v3 Enterprise，因此 `CAPSOLVER_API_KEY` 必须可用。IPRoyal 访问 Hands 可能被目标站重置，灰度期间保持 `HANDS_FORM_PROXY_ENABLED=false`，不要让 LivePocket 的全局代理设置自动套用到 Hands。确认执行结果包含 `HANDS_DRY_RUN_CONFIRM_READY`，并检查 `/opt/orderx/auto-py/.runtime/hands-form` 的截图和 HTML 后，再改为 `false`。
 重启 Python 服务后先访问 `/health`，确认返回的 `handsFormDryRun=true`、`delayedPromoterEnabled=false`，再创建单账号灰度任务。
 
-Java 服务默认设置 `HANDS_FORM_EXECUTION_MODE=python`、`HANDS_FORM_EXTENSION_ENABLED=false`。需要紧急回退旧扩展时，同时改为：
+当前 Java 默认保持 `HANDS_FORM_EXECUTION_MODE=extension`。2026-10-05 对当前 Hands 活动做过真实 dry-run：直连可以打开并填写表单，但站点的 reCAPTCHA v3 Enterprise 拒绝了浏览器原生 token、CapSolver 标准 token 和 M1 token；IPRoyal 访问该域名还会被连接重置。因此在 CapSolver 完成该 site key 的站点适配并重新 dry-run 成功前，不得把生产配置切到 `python`。旧扩展回退配置为：
 
 ```env
 HANDS_FORM_EXECUTION_MODE=extension
 HANDS_FORM_EXTENSION_ENABLED=true
 ```
 
-回退后重启 Java 服务即可，新领取的 Hands 任务会恢复为“等待 Hands Chrome 扩展领取”。`LOTTERY_DELAYED_PROMOTER_ENABLED` 应继续保持 `false`，延时任务统一由 Java 推进。
+两个开关必须成对修改；如果只切到 `extension` 而未启用扩展接口，执行记录会直接失败并提示配置错误，不会无限停留在“等待扩展领取”。回退后重启 Java 服务，新领取和到期推进的 Hands 任务会恢复为“等待 Hands Chrome 扩展领取”。已经进入 Python ready Stream 的任务不受该开关追溯影响，回退前应先停止 Python 执行器并确认没有正在运行的 Hands 任务，再切换 Java 配置；处理完残留任务后可恢复 Python 服务。`LOTTERY_DELAYED_PROMOTER_ENABLED` 应继续保持 `false`，延时任务统一由 Java 推进，单次推进异常会在 5 秒后重新入队。
 
 如果 Python 服务通过 systemd 指定了其它工作目录也没关系，代码会按自身文件位置读取 `/opt/orderx/auto-py/.env.local`。
 

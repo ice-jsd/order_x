@@ -59,19 +59,32 @@ class CapSolverCaptchaVerifier(TaskPollingCaptchaVerifier):
             timeout_label="识别超时",
         )
 
-    def solve_recaptcha_v3_enterprise(self, site_key, page_url, page_action=None):
+    def solve_recaptcha_v3_enterprise(
+        self,
+        site_key,
+        page_url,
+        page_action=None,
+        high_score=False,
+        user_agent=None,
+    ):
         task_config = {
-            "type": "ReCaptchaV3EnterpriseTaskProxyLess",
+            "type": (
+                "ReCaptchaV3EnterpriseM1TaskProxyLess"
+                if high_score
+                else "ReCaptchaV3EnterpriseTaskProxyLess"
+            ),
             "websiteURL": page_url,
             "websiteKey": site_key,
         }
         if page_action:
             task_config["pageAction"] = page_action
+        if user_agent:
+            task_config["userAgent"] = user_agent
 
         task_id = self._submit_task(task_config, submit_error_label="提交验证码失败")
         return self._poll_task_result(
             task_id,
-            ready_log_label="V3 Enterprise",
+            ready_log_label="V3 Enterprise M1" if high_score else "V3 Enterprise",
             poll_error_label="获取结果失败",
             timeout_label="识别超时",
         )
