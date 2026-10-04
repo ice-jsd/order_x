@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -79,6 +80,63 @@ class LivePocketProxyTests(unittest.TestCase):
         with patch.dict(os.environ, env, clear=False):
             pool = LivePocketProxyPool()
             proxies = pool._build_decodo_proxies(1, logger)
+
+        self.assertEqual(proxies, [])
+        logger.warning.assert_called_once()
+
+    def test_iproyal_builds_independent_japan_sticky_sessions(self):
+        env = {
+            "LIVEPOCKET_PROXY_PROVIDER": "iproyal",
+            "LIVEPOCKET_PROXY_REGION": "JP",
+            "LIVEPOCKET_PROXY_GATEWAY": "geo.iproyal.com:12321",
+            "LIVEPOCKET_PROXY_USERNAME": "proxy-user",
+            "LIVEPOCKET_PROXY_PASSWORD": "proxy-password",
+            "LIVEPOCKET_PROXY_SESSION_MINUTES": "90",
+            "LIVEPOCKET_PROXY_STATIC": "",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            pool = LivePocketProxyPool()
+            proxies = pool._build_iproyal_proxies(2, Mock())
+
+        self.assertEqual(len(proxies), 2)
+        self.assertEqual({proxy.host for proxy in proxies}, {"geo.iproyal.com"})
+        self.assertEqual({proxy.port for proxy in proxies}, {"12321"})
+        self.assertTrue(all(proxy.provider == "iproyal" for proxy in proxies))
+        self.assertTrue(all(proxy.username == "proxy-user" for proxy in proxies))
+        self.assertTrue(
+            all(
+                re.fullmatch(
+                    r"proxy-password_country-jp_session-[0-9a-f]{8}_lifetime-90m",
+                    proxy.password,
+                )
+                for proxy in proxies
+            )
+        )
+        self.assertEqual(len({proxy.password for proxy in proxies}), 2)
+
+    def test_iproyal_uses_provider_default_gateway_and_session_limit(self):
+        env = {
+            "LIVEPOCKET_PROXY_PROVIDER": "iproyal",
+            "LIVEPOCKET_PROXY_GATEWAY": "",
+            "LIVEPOCKET_PROXY_SESSION_MINUTES": "20000",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            pool = LivePocketProxyPool()
+
+        self.assertEqual(pool.gateway, "geo.iproyal.com:12321")
+        self.assertEqual(pool.session_minutes, 10080)
+
+    def test_iproyal_requires_proxy_credentials(self):
+        env = {
+            "LIVEPOCKET_PROXY_PROVIDER": "iproyal",
+            "LIVEPOCKET_PROXY_USERNAME": "",
+            "LIVEPOCKET_PROXY_PASSWORD": "",
+            "LIVEPOCKET_PROXY_STATIC": "",
+        }
+        logger = Mock()
+        with patch.dict(os.environ, env, clear=False):
+            pool = LivePocketProxyPool()
+            proxies = pool._build_iproyal_proxies(1, logger)
 
         self.assertEqual(proxies, [])
         logger.warning.assert_called_once()

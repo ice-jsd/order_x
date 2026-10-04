@@ -173,12 +173,16 @@ class LivePocketProxyPool:
     def __init__(self) -> None:
         self.provider = (env_text("LIVEPOCKET_PROXY_PROVIDER", "ipweb") or "ipweb").lower()
         self.region = env_text("LIVEPOCKET_PROXY_REGION", "JP") or "JP"
-        default_gateway = "gate.decodo.com:7000" if self.provider == "decodo" else "gate1.ipweb.cc:7778"
+        default_gateway = {
+            "decodo": "gate.decodo.com:7000",
+            "iproyal": "geo.iproyal.com:12321",
+        }.get(self.provider, "gate1.ipweb.cc:7778")
         self.gateway = env_text("LIVEPOCKET_PROXY_GATEWAY", default_gateway) or default_gateway
         self.proxy_username = env_text("LIVEPOCKET_PROXY_USERNAME", "")
         self.proxy_password = env_text("LIVEPOCKET_PROXY_PASSWORD", "")
         self.target_approved = bool_value(env_text("LIVEPOCKET_PROXY_TARGET_APPROVED", "false"))
-        self.session_minutes = min(max(env_int("LIVEPOCKET_PROXY_SESSION_MINUTES", 60), 1), 1440)
+        max_session_minutes = 10080 if self.provider == "iproyal" else 1440
+        self.session_minutes = min(max(env_int("LIVEPOCKET_PROXY_SESSION_MINUTES", 60), 1), max_session_minutes)
         self.api_url = env_text("LIVEPOCKET_PROXY_API_URL", "http://api.ipweb.cc:8004/api/agent/account2")
         self.api_token = env_text("LIVEPOCKET_PROXY_API_TOKEN", "")
         self.batch_size = max(env_int("LIVEPOCKET_PROXY_BATCH_SIZE", 10), 1)
@@ -271,6 +275,8 @@ class LivePocketProxyPool:
 
         if self.provider == "decodo":
             return self._build_decodo_proxies(count, logger)
+        if self.provider == "iproyal":
+            return self._build_iproyal_proxies(count, logger)
         if self.provider != "ipweb":
             logger.warning(f"不支持的代理供应商: {self.provider}")
             return []
@@ -372,6 +378,39 @@ class LivePocketProxyPool:
                 )
             )
         logger.info(f"生成 Decodo 粘性会话: count={len(proxies)}, region={self.region}")
+        return proxies
+
+    def _build_iproyal_proxies(self, count: int, logger: Any) -> List[LivePocketProxy]:
+        if not self.proxy_username or not self.proxy_password:
+            logger.warning("IPRoyal 代理已开启，但缺少 LIVEPOCKET_PROXY_USERNAME 或 LIVEPOCKET_PROXY_PASSWORD")
+            return []
+
+        gateway_proxy = parse_proxy_string(self.gateway, self.provider, self.region)
+        if not gateway_proxy:
+            logger.warning(f"代理网关格式错误: {self.gateway}")
+            return []
+
+        country = self.region.strip().lower()
+        proxies: List[LivePocketProxy] = []
+        for _ in range(max(count, 1)):
+            session_id = secrets.token_hex(4)
+            password = self.proxy_password
+            if country:
+                password = f"{password}_country-{country}"
+            password = f"{password}_session-{session_id}_lifetime-{self.session_minutes}m"
+            raw = f"{gateway_proxy.host}:{gateway_proxy.port}:{self.proxy_username}:{password}"
+            proxies.append(
+                LivePocketProxy(
+                    raw=raw,
+                    host=gateway_proxy.host,
+                    port=gateway_proxy.port,
+                    username=self.proxy_username,
+                    password=password,
+                    provider=self.provider,
+                    region=self.region,
+                )
+            )
+        logger.info(f"生成 IPRoyal 粘性会话: count={len(proxies)}, region={self.region}")
         return proxies
 
 

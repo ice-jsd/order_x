@@ -273,4 +273,6 @@ docker compose -f /opt/orderx/docker-compose.yml ps
 
 Decodo 住宅代理使用 `LIVEPOCKET_PROXY_PROVIDER=decodo`、`gate.decodo.com:7000` 和代理专用用户名/密码。LivePocket 属于 Decodo 默认限制的 Ticketing 类目标，必须先由 Decodo 客服审核解锁，再设置 `LIVEPOCKET_PROXY_TARGET_APPROVED=true`、修改线上环境并重启 Python 服务。控制台登录密码和代理凭据均不得提交到 Git。
 
+IPRoyal 住宅代理使用 `LIVEPOCKET_PROXY_PROVIDER=iproyal`、`geo.iproyal.com:12321` 和 Residential Proxy 专用用户名/密码。程序为每个账号生成独立的日本粘性 session；首次切换必须先用小批量账号验证登录、验证码、提交和失败换 IP，再逐步扩大并发。
+
 配置变更后必须重启对应服务，并重新执行发布后验证。
