@@ -12,7 +12,7 @@ public class TicketHandsFormExtensionProperties {
     /**
      * 是否启用 Hands Form Chrome 扩展执行链路。
      */
-    private boolean enabled = true;
+    private boolean enabled = false;
 
     /**
      * 扩展调用后端 API 的共享密钥。

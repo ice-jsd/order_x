@@ -307,7 +307,7 @@ websocket:
       delayed-poll-interval-ms: 1000
       queue-poll-interval-ms: 1000
     hands-form-extension:
-      enabled: true
+      enabled: false
       api-secret: "change-me-hands-extension-secret"
     mail-reader:
       enabled: true

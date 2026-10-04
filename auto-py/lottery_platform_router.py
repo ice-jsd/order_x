@@ -27,6 +27,10 @@ def resolve_executor(platform_code: Any):
         from livepocket_lottery import LivePocketLotteryExecutor
 
         return LivePocketLotteryExecutor()
+    if code == "hands-form":
+        from hands_form_lottery import HandsFormLotteryExecutor
+
+        return HandsFormLotteryExecutor()
     if code in {"jump-shop", "jump-shop-online"}:
         from jump_shop import JumpShopExecutor
 

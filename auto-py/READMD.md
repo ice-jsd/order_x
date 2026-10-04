@@ -26,6 +26,7 @@ python main.py --host 0.0.0.0 --port 8098
 - `livepocket_profile.py`：改姓。
 - `livepocket_purchase.py`：抢票/普通下单。
 - `livepocket_lottery.py`：LivePocket 抽票、活动解析，以及历史沿用的宿主实现。
+- `hands_form_lottery.py`：Hands 活动解析与服务器端 Playwright 表单提交。
 - `jump_shop.py`：Jump Shop 商品解析、注册/登录、Shopify checkout 执行。
 
 ## HTTP 接口
@@ -86,6 +87,10 @@ Python 每个账号发布一条 `account_result`，批次结束发布 `batch_com
 - `LOTTERY_REDIS_HOST` / `LOTTERY_REDIS_PORT` / `LOTTERY_REDIS_DB` / `LOTTERY_REDIS_PASSWORD`：Redis 连接。
 - `LOTTERY_WORKERS`：抽票 Worker 数。
 - `LOTTERY_EVENT_PARSE_WORKERS`：活动解析 Worker 数。
+- `HANDS_FORM_BROWSER_HEADLESS`：Hands 是否使用无头浏览器，服务器默认 `true`。
+- `HANDS_FORM_BROWSER_PATH`：可选的 Chrome/Chromium 可执行文件路径。
+- `HANDS_FORM_BROWSER_TIMEOUT_MS`：Hands 单个页面阶段超时，默认 `90000`。
+- `HANDS_FORM_FAILURE_ARTIFACTS_ENABLED`：失败时在 `.runtime/hands-form` 保存页面和截图，默认 `true`。
 
 LivePocket 动态代理：
 

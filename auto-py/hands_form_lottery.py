@@ -1,15 +1,38 @@
 import html
+import json
+import os
 import re
-from typing import Any, Dict, Optional
+import time
+from pathlib import Path
+from typing import Any, Dict, Optional, Sequence, Tuple
 from urllib.parse import urlsplit, urlunsplit
 
 import requests
 
-from ticket_runtime import get_logger
+from ticket_runtime import bool_value, env_text, get_logger
 from livepocket_proxy import apply_proxy_to_session, get_proxy, mark_proxy_failed, proxy_max_attempts
 
 
 LOGGER = get_logger("hands-form.parser")
+
+SUCCESS_MARKERS = (
+    "お客様のお申し込みを受け付けました。",
+    "ご入力いただいたメールアドレス宛に自動でメールをお送りしていますのでご確認ください。",
+    "ご入力の内容は正常に送信されました。",
+    "受付済み",
+)
+FAILURE_MARKERS = (
+    "Google reCAPTCHAの認証に失敗しました。",
+    "reCAPTCHAの認証に失敗しました。",
+    "認証に失敗しました。再度送信してください。",
+)
+CONFIRM_COPY = "以下の内容で送信します。ご確認のうえ、「この内容で送信する」ボタンを押してください。"
+ORDER_NUMBER_PATTERNS = (
+    re.compile(r"登録番号[:：]?\s*([0-9]{4,})"),
+    re.compile(r"受付番号[:：]?\s*([0-9]{4,})"),
+    re.compile(r"申込番号[:：]?\s*([0-9]{4,})"),
+)
+DEFAULT_BROWSER_TIMEOUT_MS = 90000
 
 DEFAULT_HEADERS = {
     "User-Agent": (
@@ -26,6 +49,254 @@ DEFAULT_HEADERS = {
 
 def _log(message: str) -> None:
     LOGGER.info(message)
+
+
+def _parse_json_object(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return {}
+    try:
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, dict) else {}
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(env_text(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _compact_text(value: Any, max_length: int = 2000) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    return text[:max(max_length, 0)]
+
+
+def extract_hands_order_number(page_text: str) -> str:
+    for pattern in ORDER_NUMBER_PATTERNS:
+        match = pattern.search(page_text or "")
+        if match:
+            return match.group(1)
+    return ""
+
+
+def classify_hands_page(state: Dict[str, Any]) -> str:
+    body_text = str(state.get("bodyText") or "")
+    if extract_hands_order_number(body_text) or any(marker in body_text for marker in SUCCESS_MARKERS):
+        return "success"
+    if any(marker in body_text for marker in FAILURE_MARKERS):
+        return "failed"
+    if bool(state.get("captchaChallengeVisible")):
+        return "captcha_required"
+    action = str(state.get("formAction") or "")
+    if bool(state.get("hasForm")) and bool(state.get("hasEditableFields")) and "/process" not in action:
+        return "entry"
+    if bool(state.get("hasForm")) and (
+        bool(state.get("hasConfirmButton"))
+        or CONFIRM_COPY in body_text
+        or ("/process" in action and not bool(state.get("hasEditableFields")))
+    ):
+        return "confirm"
+    return "unknown"
+
+
+def resolve_hands_execution_input(payload: Dict[str, Any]) -> Dict[str, Any]:
+    task_options = _parse_json_object(payload.get("taskOptions"))
+    account_info = _parse_json_object(payload.get("accountInfo"))
+    full_name = str(account_info.get("fullName") or "").strip()
+    if not full_name:
+        full_name = f"{account_info.get('familyName') or ''}{account_info.get('givenName') or ''}".strip()
+    quantity = payload.get("purchaseQuantity") or task_options.get("purchaseQuantity") or task_options.get("quantity") or 1
+    try:
+        quantity = max(int(quantity), 1)
+    except (TypeError, ValueError):
+        quantity = 1
+    return {
+        "eventUrl": str(
+            task_options.get("eventUrl")
+            or task_options.get("lotteryEntryUrl")
+            or task_options.get("ticketEntryUrl")
+            or ""
+        ).strip(),
+        "email": str(payload.get("email") or task_options.get("email") or "").strip(),
+        "fullName": full_name,
+        "furigana": str(account_info.get("furigana") or "").strip(),
+        "quantity": quantity,
+    }
+
+
+def _browser_executable_path() -> Optional[str]:
+    candidates = (
+        env_text("HANDS_FORM_BROWSER_PATH"),
+        env_text("LIVEPOCKET_BROWSER_PATH"),
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/snap/bin/chromium",
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    )
+    return next((path for path in candidates if path and os.path.exists(path)), None)
+
+
+def _first_visible_locator(page: Any, selectors: Sequence[str]) -> Optional[Any]:
+    for selector in selectors:
+        locator = page.locator(selector)
+        for index in range(min(locator.count(), 10)):
+            candidate = locator.nth(index)
+            try:
+                if candidate.is_visible() and candidate.is_enabled():
+                    return candidate
+            except Exception:
+                continue
+    return None
+
+
+def _read_browser_state(page: Any) -> Dict[str, Any]:
+    state = page.evaluate(
+        """
+        () => {
+          const form = document.querySelector('form#entryForm')
+            || document.querySelector('form[action*="/process"]');
+          const visibleEditable = form
+            ? Array.from(form.querySelectorAll('input, textarea, select')).some((el) => {
+                const type = String(el.getAttribute('type') || '').toLowerCase();
+                if (type === 'hidden' || el.disabled) return false;
+                const rect = el.getBoundingClientRect();
+                return rect.width > 0 && rect.height > 0;
+              })
+            : false;
+          const controls = form
+            ? Array.from(form.querySelectorAll('button, input[type="submit"], input[type="button"], a'))
+            : [];
+          const hasConfirmButton = controls.some((el) =>
+            String(el.innerText || el.value || '').includes('この内容で送信する')
+            || String(el.getAttribute('name') || '') === 'Submit'
+          );
+          const captchaChallengeVisible = Array.from(document.querySelectorAll('iframe[src*="recaptcha/api2/bframe"]'))
+            .some((el) => {
+              const rect = el.getBoundingClientRect();
+              return rect.width > 0 && rect.height > 0;
+            });
+          return {
+            bodyText: document.body ? document.body.innerText : '',
+            hasForm: !!form,
+            formAction: form ? String(form.action || '') : '',
+            hasEditableFields: visibleEditable,
+            hasConfirmButton,
+            captchaChallengeVisible,
+          };
+        }
+        """
+    )
+    result = state if isinstance(state, dict) else {}
+    result["url"] = str(getattr(page, "url", "") or "")
+    return result
+
+
+def _wait_for_page_stage(page: Any, terminal_stages: Sequence[str], timeout_ms: int) -> Tuple[str, Dict[str, Any]]:
+    deadline = time.monotonic() + max(timeout_ms, 1000) / 1000
+    last_state: Dict[str, Any] = {}
+    last_stage = "unknown"
+    while time.monotonic() < deadline:
+        try:
+            last_state = _read_browser_state(page)
+            last_stage = classify_hands_page(last_state)
+            if last_stage in terminal_stages:
+                return last_stage, last_state
+        except Exception:
+            pass
+        page.wait_for_timeout(500)
+    return last_stage, last_state
+
+
+def _fill_hands_entry_form(page: Any, values: Dict[str, Any]) -> None:
+    required_fields = {
+        "cname": values["fullName"],
+        "cname2": values["furigana"],
+        "mail": values["email"],
+        "mail_confirmation": values["email"],
+    }
+    missing = []
+    for name, value in required_fields.items():
+        locator = page.locator(f'form#entryForm input[name="{name}"]').first
+        if locator.count() == 0:
+            missing.append(name)
+            continue
+        locator.fill(str(value))
+    if missing:
+        raise RuntimeError(f"Hands 表单缺少字段: {', '.join(missing)}")
+
+    quantity = page.locator('form#entryForm input[name="number"]').first
+    if quantity.count() > 0:
+        quantity.evaluate(
+            """(el, value) => {
+              el.value = String(value);
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+            }""",
+            str(values["quantity"]),
+        )
+
+
+def _submit_hands_form(page: Any, *, confirm: bool) -> None:
+    selectors = (
+        (
+            'form#entryForm button.-green[name="Submit"]',
+            'form#entryForm button[name="Submit"]',
+            'form#entryForm button:has-text("この内容で送信する")',
+            'form#entryForm input[type="submit"]',
+        )
+        if confirm
+        else (
+            'form#entryForm button:has-text("確認画面へ")',
+            'form#entryForm input[type="submit"]',
+            'form#entryForm button[type="submit"]',
+        )
+    )
+    button = _first_visible_locator(page, selectors)
+    if button is not None:
+        button.scroll_into_view_if_needed()
+        button.click()
+        return
+    form = page.locator('form#entryForm').first
+    if form.count() == 0:
+        raise RuntimeError("Hands 页面未找到 entryForm")
+    form.evaluate(
+        """(el) => {
+          if (typeof el.requestSubmit === 'function') el.requestSubmit();
+          else el.submit();
+        }"""
+    )
+
+
+def _save_failure_artifacts(page: Any, execution_id: str) -> Dict[str, str]:
+    if not bool_value(env_text("HANDS_FORM_FAILURE_ARTIFACTS_ENABLED", "true")):
+        return {}
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "-", execution_id or "unknown")
+    directory = Path(__file__).resolve().parent / ".runtime" / "hands-form"
+    directory.mkdir(parents=True, exist_ok=True)
+    prefix = directory / f"{safe_id}-{int(time.time())}"
+    result: Dict[str, str] = {}
+    try:
+        screenshot_path = prefix.with_suffix(".png")
+        page.screenshot(path=str(screenshot_path), full_page=True)
+        result["screenshot"] = str(screenshot_path)
+    except Exception as exc:
+        result["screenshotError"] = str(exc)
+    try:
+        html_path = prefix.with_suffix(".html")
+        html_path.write_text(page.content(), encoding="utf-8")
+        result["html"] = str(html_path)
+    except Exception as exc:
+        result["htmlError"] = str(exc)
+    return result
 
 
 def normalize_hands_event_url(event_url: str) -> str:
@@ -154,3 +425,179 @@ def fetch_hands_event_info(event_url: str, session: Optional[requests.Session] =
             }
         ],
     }
+
+
+class HandsFormLotteryExecutor:
+    """使用服务器端 Playwright 提交 Hands 公开抽选表单。"""
+
+    def execute(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        execution_id = str(payload.get("executionId") or payload.get("scheduleId") or "unknown")
+        values = resolve_hands_execution_input(payload)
+        missing = [key for key in ("eventUrl", "email", "fullName", "furigana") if not values.get(key)]
+        if missing:
+            return self.fail(f"Hands 抽票缺少必要字段: {', '.join(missing)}")
+
+        try:
+            values["eventUrl"] = normalize_hands_event_url(values["eventUrl"])
+        except ValueError as exc:
+            return self.fail(str(exc))
+
+        try:
+            from playwright.sync_api import sync_playwright
+        except Exception as exc:
+            return self.fail(f"Playwright 不可用: {exc}")
+
+        timeout_ms = max(_env_int("HANDS_FORM_BROWSER_TIMEOUT_MS", DEFAULT_BROWSER_TIMEOUT_MS), 10000)
+        headless = bool_value(env_text("HANDS_FORM_BROWSER_HEADLESS", "true"))
+        proxy_key = f"hands-form:{payload.get('accountId') or values['email']}"
+        proxy = get_proxy(proxy_key, platform_code="hands-form")
+        browser = None
+        context = None
+        page = None
+        submitted = False
+        _log(
+            f"[hands-form] START executionId={execution_id}, accountId={payload.get('accountId')}, "
+            f"proxy={proxy.masked() if proxy else '-'}, headless={headless}"
+        )
+        try:
+            launch_options: Dict[str, Any] = {"headless": headless}
+            browser_path = _browser_executable_path()
+            if browser_path:
+                launch_options["executable_path"] = browser_path
+            if proxy:
+                launch_options["proxy"] = proxy.playwright_proxy()
+
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(**launch_options)
+                context = browser.new_context(
+                    user_agent=DEFAULT_HEADERS["User-Agent"],
+                    locale="ja-JP",
+                    timezone_id="Asia/Tokyo",
+                    viewport={"width": 1365, "height": 900},
+                    extra_http_headers={"Accept-Language": DEFAULT_HEADERS["Accept-Language"]},
+                )
+                page = context.new_page()
+                page.set_default_timeout(timeout_ms)
+                response = page.goto(values["eventUrl"], wait_until="domcontentloaded", timeout=timeout_ms)
+                page.wait_for_timeout(1000)
+                initial_state = _read_browser_state(page)
+                initial_stage = classify_hands_page(initial_state)
+                if initial_stage != "entry":
+                    return self._failure_from_state(
+                        f"Hands 页面未进入填写页: {initial_stage}",
+                        initial_stage,
+                        initial_state,
+                        page,
+                        execution_id,
+                        http_status=response.status if response else None,
+                    )
+
+                _fill_hands_entry_form(page, values)
+                _submit_hands_form(page, confirm=False)
+                submitted = True
+                stage, state = _wait_for_page_stage(
+                    page,
+                    ("confirm", "success", "failed", "captcha_required"),
+                    timeout_ms,
+                )
+                if stage == "confirm":
+                    _submit_hands_form(page, confirm=True)
+                    stage, state = _wait_for_page_stage(
+                        page,
+                        ("success", "failed", "captcha_required", "entry"),
+                        timeout_ms,
+                    )
+
+                if stage == "success":
+                    body_text = str(state.get("bodyText") or "")
+                    order_id = extract_hands_order_number(body_text)
+                    _log(f"[hands-form] DONE executionId={execution_id}, orderId={order_id or '-'}")
+                    return {
+                        "success": True,
+                        "status": "submitted",
+                        "executionStatus": "submitted",
+                        "paymentStatus": "not_required",
+                        "message": f"Hands 表单提交成功，受付番号 {order_id}" if order_id else "Hands 表单提交成功",
+                        "orderId": order_id,
+                        "requestUrl": values["eventUrl"],
+                        "resultUrl": state.get("url") or page.url,
+                        "rawResult": {
+                            "source": "hands-form-playwright",
+                            "stage": stage,
+                            "url": state.get("url") or page.url,
+                            "bodyText": _compact_text(body_text, 1200),
+                        },
+                    }
+
+                message = {
+                    "failed": "Hands 页面校验失败，未完成提交",
+                    "captcha_required": "Hands 出现交互式 reCAPTCHA，需要人工处理或验证码服务",
+                    "entry": "Hands 确认提交后返回填写页，可能存在字段校验错误",
+                }.get(stage, f"Hands 表单提交后页面状态未识别: {stage}")
+                return self._failure_from_state(message, stage, state, page, execution_id)
+        except Exception as exc:
+            if proxy and not submitted:
+                mark_proxy_failed(proxy, reason=f"Hands 浏览器执行异常: {exc}", key=proxy_key, platform_code="hands-form")
+            artifacts = _save_failure_artifacts(page, execution_id) if page is not None else {}
+            return self.fail(
+                f"Hands 浏览器执行异常: {exc}",
+                request_url=values["eventUrl"],
+                result_url=str(getattr(page, "url", "") or ""),
+                raw_result={"source": "hands-form-playwright", "artifacts": artifacts},
+            )
+        finally:
+            if context is not None:
+                try:
+                    context.close()
+                except Exception:
+                    pass
+            if browser is not None:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+
+    def _failure_from_state(
+        self,
+        message: str,
+        stage: str,
+        state: Dict[str, Any],
+        page: Any,
+        execution_id: str,
+        http_status: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        artifacts = _save_failure_artifacts(page, execution_id)
+        return self.fail(
+            message,
+            http_status=http_status,
+            request_url=str(state.get("url") or ""),
+            result_url=str(state.get("url") or ""),
+            raw_result={
+                "source": "hands-form-playwright",
+                "stage": stage,
+                "url": state.get("url") or "",
+                "bodyText": _compact_text(state.get("bodyText"), 2000),
+                "artifacts": artifacts,
+            },
+        )
+
+    @staticmethod
+    def fail(
+        message: str,
+        *,
+        http_status: Optional[int] = None,
+        request_url: str = "",
+        result_url: str = "",
+        raw_result: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "success": False,
+            "status": "failed",
+            "executionStatus": "failed",
+            "paymentStatus": "not_required",
+            "message": message,
+            "httpStatus": http_status,
+            "requestUrl": request_url,
+            "resultUrl": result_url,
+            "rawResult": raw_result or {"source": "hands-form-playwright"},
+        }

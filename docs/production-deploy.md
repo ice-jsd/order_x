@@ -72,7 +72,7 @@ SET NAMES utf8mb4;
 
 其中 `update_5.6.50_ticket_menu_utf8mb4_repair.sql` 用于回正已经被错误字符集写坏的票务菜单，支持重复执行。
 
-如果线上 `ticket.hands-form-extension.api-secret` 不是默认值，发布前请同步确认 Chrome 扩展端配置与线上配置一致。
+Hands Form 默认由 43 服务器上的 Python Playwright 执行器处理，不再依赖 Chrome 扩展。旧扩展接口保留作紧急回退，但 `ticket.hands-form-extension.enabled` 默认关闭。
 
 ## 打包产物
 
