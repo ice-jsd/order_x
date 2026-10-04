@@ -91,6 +91,7 @@ Python 每个账号发布一条 `account_result`，批次结束发布 `batch_com
 - `HANDS_FORM_PROXY_ENABLED`：Hands 是否复用动态代理，默认 `false`。Hands 与 LivePocket 的代理兼容性不同，灰度验证通过前保持直连。
 - `HANDS_FORM_CAPTCHA_PROVIDER`：Hands reCAPTCHA token 来源，可选 `capsolver` 或 `browser`，默认 `capsolver`。
 - `HANDS_FORM_CAPTCHA_HIGH_SCORE`：Hands reCAPTCHA v3 Enterprise 是否使用 CapSolver M1 高分任务，默认 `false`；仅影响 Hands，单价高于标准任务，需供应商完成站点适配后再开启。
+- `HANDS_FORM_CAPTCHA_SESSION_MODE`：是否请求并在 Hands 域内临时注入 CapSolver 的 `recaptcha-ca-t` 会话 Cookie，默认 `true`；Cookie 只保存在当前浏览器上下文，不写入日志或磁盘。
 - `HANDS_FORM_BROWSER_HEADLESS`：Hands 是否使用无头浏览器，服务器默认 `true`。
 - `HANDS_FORM_BROWSER_PATH`：可选的 Chrome/Chromium 可执行文件路径。
 - `HANDS_FORM_BROWSER_TIMEOUT_MS`：Hands 单个页面阶段超时，默认 `90000`。

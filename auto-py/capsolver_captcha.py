@@ -66,6 +66,8 @@ class CapSolverCaptchaVerifier(TaskPollingCaptchaVerifier):
         page_action=None,
         high_score=False,
         user_agent=None,
+        session_mode=False,
+        return_solution=False,
     ):
         task_config = {
             "type": (
@@ -80,14 +82,30 @@ class CapSolverCaptchaVerifier(TaskPollingCaptchaVerifier):
             task_config["pageAction"] = page_action
         if user_agent:
             task_config["userAgent"] = user_agent
+        if session_mode:
+            task_config["isSession"] = True
 
         task_id = self._submit_task(task_config, submit_error_label="提交验证码失败")
-        return self._poll_task_result(
+        ready_log_label = "V3 Enterprise M1" if high_score else "V3 Enterprise"
+        if not return_solution:
+            return self._poll_task_result(
+                task_id,
+                ready_log_label=ready_log_label,
+                poll_error_label="获取结果失败",
+                timeout_label="识别超时",
+            )
+
+        solution = self._poll_task_solution(
             task_id,
-            ready_log_label="V3 Enterprise M1" if high_score else "V3 Enterprise",
+            ready_log_label=ready_log_label,
             poll_error_label="获取结果失败",
             timeout_label="识别超时",
         )
+        token = str(solution.get("gRecaptchaResponse") or "").strip()
+        if not token:
+            raise Exception("获取结果失败: 响应缺少 gRecaptchaResponse")
+        self._log_task_ready(ready_log_label)
+        return solution
 
     def solve_turnstile(self, site_key, page_url, action=None, cdata=None):
         task_config = {

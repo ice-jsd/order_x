@@ -13,6 +13,7 @@ if str(AUTO_PY_DIR) not in sys.path:
 
 from hands_form_lottery import (  # noqa: E402
     HandsFormLotteryExecutor,
+    _capture_hands_submit_request,
     classify_hands_page,
     extract_hands_order_number,
     extract_hands_recaptcha_config,
@@ -21,6 +22,24 @@ from hands_form_lottery import (  # noqa: E402
 
 
 class HandsFormLotteryTest(unittest.TestCase):
+    def test_submit_diagnostic_keeps_only_field_names_and_token_lengths(self):
+        request = SimpleNamespace(
+            method="POST",
+            url="https://event.hands.net/validate",
+            post_data="mail=person%40example.com&g-recaptcha-response=secret-token",
+        )
+        diagnostics = []
+
+        _capture_hands_submit_request(request, diagnostics)
+
+        self.assertEqual(diagnostics[0]["path"], "/validate")
+        self.assertEqual(
+            diagnostics[0]["recaptchaTokenLengths"],
+            {"g-recaptcha-response": [12]},
+        )
+        self.assertNotIn("person@example.com", json.dumps(diagnostics))
+        self.assertNotIn("secret-token", json.dumps(diagnostics))
+
     def test_resolve_execution_input_from_java_payload(self):
         payload = {
             "email": "person@example.com",
@@ -136,6 +155,25 @@ class HandsFormLotteryTest(unittest.TestCase):
 
         self.assertEqual("failed", result["executionStatus"])
         self.assertEqual("HANDS_RECAPTCHA_REJECTED", result["errorCode"])
+
+    def test_field_validation_error_is_reported_without_captcha_code(self):
+        executor = HandsFormLotteryExecutor()
+        state = {
+            "url": "https://event.hands.net/segment/123",
+            "bodyText": "入力内容を確認してください。",
+            "formErrors": ["フリガナはカタカナで入力してください。"],
+        }
+        with patch("hands_form_lottery._save_failure_artifacts", return_value={}):
+            result = executor._failure_from_state(
+                "Hands 页面校验失败",
+                "entry",
+                state,
+                SimpleNamespace(url=state["url"]),
+                "execution-1",
+            )
+
+        self.assertIn("フリガナ", result["message"])
+        self.assertNotIn("errorCode", result)
 
 
 if __name__ == "__main__":

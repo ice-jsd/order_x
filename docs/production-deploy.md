@@ -138,13 +138,14 @@ LOTTERY_DELAYED_PROMOTER_ENABLED=false
 HANDS_FORM_PROXY_ENABLED=false
 HANDS_FORM_CAPTCHA_PROVIDER=capsolver
 HANDS_FORM_CAPTCHA_HIGH_SCORE=false
+HANDS_FORM_CAPTCHA_SESSION_MODE=true
 HANDS_FORM_DRY_RUN=true
 ```
 
 首次灰度时保持 `HANDS_FORM_DRY_RUN=true`，只验证填写页到最终确认页，不会点击最终提交。Hands 当前使用 reCAPTCHA v3 Enterprise，因此 `CAPSOLVER_API_KEY` 必须可用。IPRoyal 访问 Hands 可能被目标站重置，灰度期间保持 `HANDS_FORM_PROXY_ENABLED=false`，不要让 LivePocket 的全局代理设置自动套用到 Hands。确认执行结果包含 `HANDS_DRY_RUN_CONFIRM_READY`，并检查 `/opt/orderx/auto-py/.runtime/hands-form` 的截图和 HTML 后，再改为 `false`。
 重启 Python 服务后先访问 `/health`，确认返回的 `handsFormDryRun=true`、`delayedPromoterEnabled=false`，再创建单账号灰度任务。
 
-当前 Java 默认保持 `HANDS_FORM_EXECUTION_MODE=extension`。2026-10-05 对当前 Hands 活动做过真实 dry-run：直连可以打开并填写表单，但站点的 reCAPTCHA v3 Enterprise 拒绝了浏览器原生 token、CapSolver 标准 token 和 M1 token；IPRoyal 访问该域名还会被连接重置。因此在 CapSolver 完成该 site key 的站点适配并重新 dry-run 成功前，不得把生产配置切到 `python`。旧扩展回退配置为：
+当前 Java 默认保持 `HANDS_FORM_EXECUTION_MODE=extension`。2026-10-05 对当前 Hands 活动做过真实 dry-run：直连可以打开并填写表单，提交请求也包含 reCAPTCHA token，但站点的 reCAPTCHA v3 Enterprise 拒绝了浏览器原生 token、CapSolver 标准 token、会话模式 token 和 M1 token；IPRoyal 访问该域名还会被连接重置。因此在 CapSolver 完成该 site key 的站点适配并重新 dry-run 成功前，不得把生产配置切到 `python`。旧扩展回退配置为：
 
 ```env
 HANDS_FORM_EXECUTION_MODE=extension

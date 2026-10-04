@@ -28,6 +28,29 @@ TURNSTILE_HTML = """
 
 
 class CapSolverTurnstileTests(unittest.TestCase):
+    def test_solve_enterprise_v3_session_returns_full_solution(self):
+        solver = CapSolverCaptchaVerifier("test-key", poll_interval_seconds=0)
+        solver._submit_task = Mock(return_value="task-session")
+        solver._poll_task_solution = Mock(
+            return_value={
+                "gRecaptchaResponse": "enterprise-token",
+                "recaptcha-ca-t": "session-cookie",
+            }
+        )
+
+        solution = solver.solve_recaptcha_v3_enterprise(
+            "site-key",
+            "https://event.hands.net/segment/123",
+            page_action="submit",
+            user_agent="test-user-agent",
+            session_mode=True,
+            return_solution=True,
+        )
+
+        self.assertEqual(solution["gRecaptchaResponse"], "enterprise-token")
+        self.assertEqual(solution["recaptcha-ca-t"], "session-cookie")
+        self.assertTrue(solver._submit_task.call_args.args[0]["isSession"])
+
     def test_solve_enterprise_v3_high_score_uses_m1_task(self):
         solver = CapSolverCaptchaVerifier("test-key", poll_interval_seconds=0)
         solver._submit_task = Mock(return_value="task-m1")

@@ -67,6 +67,36 @@ class TaskPollingCaptchaVerifier(HCaptchaVerifier):
         timeout_label: str,
         solution_keys: Sequence[str] = ("gRecaptchaResponse",),
     ) -> str:
+        solution = self._poll_task_solution(
+            task_id,
+            ready_log_label=ready_log_label,
+            poll_error_label=poll_error_label,
+            timeout_label=timeout_label,
+        )
+        token = next(
+            (
+                str(solution.get(key) or "").strip()
+                for key in solution_keys
+                if str(solution.get(key) or "").strip()
+            ),
+            "",
+        )
+        if not token:
+            raise Exception(f"{poll_error_label}: 响应缺少 {'/'.join(solution_keys)}")
+        self._log_task_ready(ready_log_label)
+        return token
+
+    def _log_task_ready(self, ready_log_label: str) -> None:
+        print(f"[{self.provider_name}] {ready_log_label} 识别成功!")
+
+    def _poll_task_solution(
+        self,
+        task_id: str,
+        *,
+        ready_log_label: str,
+        poll_error_label: str,
+        timeout_label: str,
+    ) -> Dict[str, Any]:
         print(f"[{self.provider_name}] {ready_log_label} 任务ID: {task_id}, 等待识别...")
         for _ in range(self.poll_attempts):
             if self.poll_interval_seconds > 0:
@@ -83,18 +113,9 @@ class TaskPollingCaptchaVerifier(HCaptchaVerifier):
             status = str(result.get("status") or "").strip().lower()
             if status == "ready":
                 solution = result.get("solution") or {}
-                token = next(
-                    (
-                        str(solution.get(key) or "").strip()
-                        for key in solution_keys
-                        if str(solution.get(key) or "").strip()
-                    ),
-                    "",
-                )
-                if not token:
-                    raise Exception(f"{poll_error_label}: 响应缺少 {'/'.join(solution_keys)}")
-                print(f"[{self.provider_name}] {ready_log_label} 识别成功!")
-                return token
+                if not isinstance(solution, dict):
+                    raise Exception(f"{poll_error_label}: solution 格式无效")
+                return solution
             if status != "processing":
                 raise Exception(f"{poll_error_label}: {result}")
         raise Exception(timeout_label)

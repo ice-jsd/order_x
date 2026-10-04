@@ -5,7 +5,7 @@ import re
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Tuple
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qs, urlsplit, urlunsplit
 
 import requests
 
@@ -213,6 +213,11 @@ def _read_browser_state(page: Any) -> Dict[str, Any]:
               const rect = el.getBoundingClientRect();
               return rect.width > 0 && rect.height > 0;
             });
+          const formErrors = form
+            ? Array.from(form.querySelectorAll('.m-o-form__error-msg, .error, [role="alert"]'))
+                .map((el) => String(el.innerText || el.textContent || '').trim())
+                .filter(Boolean)
+            : [];
           return {
             bodyText: document.body ? document.body.innerText : '',
             hasForm: !!form,
@@ -220,6 +225,7 @@ def _read_browser_state(page: Any) -> Dict[str, Any]:
             hasEditableFields: visibleEditable,
             hasConfirmButton,
             captchaChallengeVisible,
+            formErrors,
           };
         }
         """
@@ -300,15 +306,57 @@ def _apply_hands_recaptcha_token(page: Any, token: str) -> None:
     )
 
 
-def _solve_hands_recaptcha(page: Any, page_url: str) -> None:
+def _apply_hands_recaptcha_session_cookie(page: Any, page_url: str, value: str) -> None:
+    hostname = urlsplit(page_url).hostname
+    if not hostname or not value:
+        return
+    page.context.add_cookies(
+        [
+            {
+                "name": "recaptcha-ca-t",
+                "value": value,
+                "domain": hostname,
+                "path": "/",
+                "secure": True,
+                "sameSite": "Lax",
+            }
+        ]
+    )
+
+
+def _capture_hands_submit_request(request: Any, diagnostics: list) -> None:
+    try:
+        if str(request.method or "").upper() != "POST":
+            return
+        url = str(request.url or "")
+        if (urlsplit(url).hostname or "").lower() != "event.hands.net":
+            return
+        fields = parse_qs(str(request.post_data or ""), keep_blank_values=True)
+        token_lengths = {
+            name: [len(value) for value in values]
+            for name, values in fields.items()
+            if "recaptcha" in name.lower()
+        }
+        diagnostic = {
+            "path": urlsplit(url).path,
+            "fieldNames": sorted(fields),
+            "recaptchaTokenLengths": token_lengths,
+        }
+        diagnostics.append(diagnostic)
+        _log(f"[hands-form] submit request diagnostic={json.dumps(diagnostic, ensure_ascii=True)}")
+    except Exception as exc:
+        _log(f"[hands-form] submit request diagnostic failed: {type(exc).__name__}")
+
+
+def _solve_hands_recaptcha(page: Any, page_url: str) -> Dict[str, Any]:
     config = extract_hands_recaptcha_config(page.content())
     site_key = config["siteKey"]
     if not site_key:
-        return
+        return {"detected": False}
     provider = env_text("HANDS_FORM_CAPTCHA_PROVIDER", "capsolver").strip().lower()
     if provider == "browser":
         _log("[hands-form] using browser-generated reCAPTCHA token")
-        return
+        return {"detected": True, "provider": provider, "sessionMode": False}
     if provider != "capsolver":
         raise RuntimeError(f"Hands 验证码提供方不支持: {provider}")
     api_key = capsolver_api_key()
@@ -316,19 +364,37 @@ def _solve_hands_recaptcha(page: Any, page_url: str) -> None:
         raise RuntimeError("Hands 检测到 reCAPTCHA Enterprise，但缺少 CAPSOLVER_API_KEY")
     action = config["action"] or "submit"
     high_score = bool_value(env_text("HANDS_FORM_CAPTCHA_HIGH_SCORE", "false"))
+    session_mode = bool_value(env_text("HANDS_FORM_CAPTCHA_SESSION_MODE", "true"))
     _log(
         f"[hands-form] solving reCAPTCHA v3 Enterprise, action={action}, "
-        f"highScore={high_score}"
+        f"highScore={high_score}, sessionMode={session_mode}"
     )
-    token = CaptchaSolver(api_key=api_key).solve_recaptcha_v3_enterprise(
+    solution = CaptchaSolver(api_key=api_key).solve_recaptcha_v3_enterprise(
         site_key,
         page_url,
         page_action=action,
         high_score=high_score,
         user_agent=DEFAULT_HEADERS["User-Agent"],
+        session_mode=session_mode,
+        return_solution=True,
     )
+    token = str(solution.get("gRecaptchaResponse") or "").strip()
+    session_cookie = str(solution.get("recaptcha-ca-t") or "").strip()
+    _apply_hands_recaptcha_session_cookie(page, page_url, session_cookie)
     _apply_hands_recaptcha_token(page, token)
-    _log(f"[hands-form] reCAPTCHA token ready, tokenLength={len(token)}")
+    _log(
+        f"[hands-form] reCAPTCHA token ready, tokenLength={len(token)}, "
+        f"sessionCookiePresent={bool(session_cookie)}"
+    )
+    returned_user_agent = str(solution.get("userAgent") or "").strip()
+    return {
+        "detected": True,
+        "provider": provider,
+        "highScore": high_score,
+        "sessionMode": session_mode,
+        "sessionCookiePresent": bool(session_cookie),
+        "userAgentMatched": not returned_user_agent or returned_user_agent == DEFAULT_HEADERS["User-Agent"],
+    }
 
 
 def _submit_hands_form(page: Any, *, confirm: bool) -> None:
@@ -552,6 +618,8 @@ class HandsFormLotteryExecutor:
                     context = None
                     page = None
                     submitted = False
+                    submit_diagnostics = []
+                    captcha_diagnostics: Dict[str, Any] = {}
                     try:
                         proxy = (
                             get_proxy(proxy_key, refresh=attempt > 1, platform_code="hands-form")
@@ -584,6 +652,10 @@ class HandsFormLotteryExecutor:
                         )
                         page = context.new_page()
                         page.set_default_timeout(timeout_ms)
+                        page.on(
+                            "request",
+                            lambda request: _capture_hands_submit_request(request, submit_diagnostics),
+                        )
                         response = page.goto(values["eventUrl"], wait_until="domcontentloaded", timeout=timeout_ms)
                         page.wait_for_timeout(1000)
                         initial_state = _read_browser_state(page)
@@ -596,10 +668,12 @@ class HandsFormLotteryExecutor:
                                 page,
                                 execution_id,
                                 http_status=response.status if response else None,
+                                request_diagnostics=submit_diagnostics,
+                                captcha_diagnostics=captcha_diagnostics,
                             )
 
                         _fill_hands_entry_form(page, values)
-                        _solve_hands_recaptcha(page, values["eventUrl"])
+                        captcha_diagnostics = _solve_hands_recaptcha(page, values["eventUrl"])
                         _submit_hands_form(page, confirm=False)
                         submitted = True
                         stage, state = _wait_for_page_stage(
@@ -609,7 +683,13 @@ class HandsFormLotteryExecutor:
                         )
                         if stage == "confirm":
                             if values["dryRun"]:
-                                return self._dry_run_result(state, page, execution_id)
+                                return self._dry_run_result(
+                                    state,
+                                    page,
+                                    execution_id,
+                                    request_diagnostics=submit_diagnostics,
+                                    captcha_diagnostics=captcha_diagnostics,
+                                )
                             _submit_hands_form(page, confirm=True)
                             stage, state = _wait_for_page_stage(
                                 page,
@@ -635,6 +715,8 @@ class HandsFormLotteryExecutor:
                                     "stage": stage,
                                     "url": state.get("url") or page.url,
                                     "bodyText": _compact_text(body_text, 1200),
+                                    "requestDiagnostics": submit_diagnostics,
+                                    "captchaDiagnostics": captcha_diagnostics,
                                 },
                             }
 
@@ -643,7 +725,15 @@ class HandsFormLotteryExecutor:
                             "captcha_required": "Hands 出现交互式 reCAPTCHA，需要人工处理或验证码服务",
                             "entry": "Hands 确认提交后返回填写页，可能存在字段校验错误",
                         }.get(stage, f"Hands 表单提交后页面状态未识别: {stage}")
-                        return self._failure_from_state(message, stage, state, page, execution_id)
+                        return self._failure_from_state(
+                            message,
+                            stage,
+                            state,
+                            page,
+                            execution_id,
+                            request_diagnostics=submit_diagnostics,
+                            captcha_diagnostics=captcha_diagnostics,
+                        )
                     except Exception as exc:
                         last_error = exc
                         artifacts = _save_failure_artifacts(page, execution_id) if page is not None else {}
@@ -661,7 +751,12 @@ class HandsFormLotteryExecutor:
                             f"Hands 浏览器执行异常: {exc}",
                             request_url=values["eventUrl"],
                             result_url=str(getattr(page, "url", "") or ""),
-                            raw_result={"source": "hands-form-playwright", "artifacts": artifacts},
+                            raw_result={
+                                "source": "hands-form-playwright",
+                                "requestDiagnostics": submit_diagnostics,
+                                "captchaDiagnostics": captcha_diagnostics,
+                                "artifacts": artifacts,
+                            },
                         )
                     finally:
                         if context is not None:
@@ -683,7 +778,14 @@ class HandsFormLotteryExecutor:
             )
         return self.fail(f"Hands 浏览器执行异常: {last_error or 'unknown'}", request_url=values["eventUrl"])
 
-    def _dry_run_result(self, state: Dict[str, Any], page: Any, execution_id: str) -> Dict[str, Any]:
+    def _dry_run_result(
+        self,
+        state: Dict[str, Any],
+        page: Any,
+        execution_id: str,
+        request_diagnostics: Optional[list] = None,
+        captcha_diagnostics: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         artifacts = _save_failure_artifacts(page, execution_id)
         _log(f"[hands-form] DRY-RUN executionId={execution_id}, stage=confirm, finalSubmit=false")
         return {
@@ -702,6 +804,8 @@ class HandsFormLotteryExecutor:
                 "finalSubmit": False,
                 "url": state.get("url") or page.url,
                 "bodyText": _compact_text(state.get("bodyText"), 2000),
+                "requestDiagnostics": request_diagnostics or [],
+                "captchaDiagnostics": captcha_diagnostics or {},
                 "artifacts": artifacts,
             },
         }
@@ -714,12 +818,18 @@ class HandsFormLotteryExecutor:
         page: Any,
         execution_id: str,
         http_status: Optional[int] = None,
+        request_diagnostics: Optional[list] = None,
+        captcha_diagnostics: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         artifacts = _save_failure_artifacts(page, execution_id)
         body_text = str(state.get("bodyText") or "")
         captcha_rejected = any(marker in body_text for marker in FAILURE_MARKERS)
+        form_errors = [str(item) for item in state.get("formErrors") or [] if str(item).strip()]
+        failure_message = "Hands reCAPTCHA 校验失败，未进入确认页" if captcha_rejected else message
+        if form_errors and not captcha_rejected:
+            failure_message = f"Hands 页面字段校验失败: {'; '.join(form_errors)}"
         return self.fail(
-            "Hands reCAPTCHA 校验失败，未进入确认页" if captcha_rejected else message,
+            failure_message,
             http_status=http_status,
             request_url=str(state.get("url") or ""),
             result_url=str(state.get("url") or ""),
@@ -729,6 +839,9 @@ class HandsFormLotteryExecutor:
                 "stage": stage,
                 "url": state.get("url") or "",
                 "bodyText": _compact_text(state.get("bodyText"), 2000),
+                "formErrors": form_errors,
+                "requestDiagnostics": request_diagnostics or [],
+                "captchaDiagnostics": captcha_diagnostics or {},
                 "artifacts": artifacts,
             },
         )
